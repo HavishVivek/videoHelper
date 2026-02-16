@@ -396,14 +396,24 @@ export const useScriptsStore = defineStore('scripts', () => {
     }
   }
 
-  async function fetchThumbnails() {
-    if (!currentScript.value) return
-    const scriptId = currentScript.value.id
-    
+  async function fetchThumbnails(scriptIdParam = null) {
+    // Use provided script ID or fall back to currentScript
+    const scriptId = scriptIdParam || currentScript.value?.id
+    if (!scriptId) return
+
+    // Load the script data if we don't have it
+    let scriptData = scripts.value.find(s => s.id === scriptId)
+    if (!scriptData) {
+      scriptData = await fsGet('scripts', scriptId)
+      if (!scriptData) return
+      // Add to scripts array if not present
+      scripts.value.push(scriptData)
+    }
+
     generating.value = true
     try {
-      const thumbnails = await generateThumbnailConcepts(currentScript.value.content, currentScript.value.topic)
-      
+      const thumbnails = await generateThumbnailConcepts(scriptData.content, scriptData.topic)
+
       // Update store state
       const script = scripts.value.find(s => s.id === scriptId)
       if (script) script.thumbnails = thumbnails
@@ -411,7 +421,7 @@ export const useScriptsStore = defineStore('scripts', () => {
 
       // Update in storage
       await fsSet('scripts', scriptId, { thumbnails })
-      
+
       return thumbnails
     } catch (e) {
       console.error('Thumbnail error:', e)
@@ -422,14 +432,24 @@ export const useScriptsStore = defineStore('scripts', () => {
     }
   }
 
-  async function fetchMetadata() {
-    if (!currentScript.value) return
-    const scriptId = currentScript.value.id
+  async function fetchMetadata(scriptIdParam = null) {
+    // Use provided script ID or fall back to currentScript
+    const scriptId = scriptIdParam || currentScript.value?.id
+    if (!scriptId) return
+
+    // Load the script data if we don't have it
+    let scriptData = scripts.value.find(s => s.id === scriptId)
+    if (!scriptData) {
+      scriptData = await fsGet('scripts', scriptId)
+      if (!scriptData) return
+      // Add to scripts array if not present
+      scripts.value.push(scriptData)
+    }
 
     generating.value = true
     try {
-      const metadata = await generateMetadata(currentScript.value.content, currentScript.value.topic)
-      
+      const metadata = await generateMetadata(scriptData.content, scriptData.topic)
+
       // Update store state
       const script = scripts.value.find(s => s.id === scriptId)
       if (script) script.metadata = metadata
@@ -437,7 +457,7 @@ export const useScriptsStore = defineStore('scripts', () => {
 
       // Update in storage
       await fsSet('scripts', scriptId, { metadata })
-      
+
       return metadata
     } catch (e) {
       console.error('Metadata error:', e)
@@ -445,6 +465,24 @@ export const useScriptsStore = defineStore('scripts', () => {
       return null
     } finally {
       generating.value = false
+    }
+  }
+
+  async function updateScript(id, updates) {
+    try {
+      if (!updates.updatedAt) {
+        updates.updatedAt = new Date().toISOString()
+      }
+      
+      await fsSet('scripts', id, updates)
+      
+      const script = scripts.value.find(s => s.id === id)
+      if (script) Object.assign(script, updates)
+      if (currentScript.value?.id === id) Object.assign(currentScript.value, updates)
+      
+    } catch (e) {
+      console.error('Update script error:', e)
+      error.value = e.message
     }
   }
 
@@ -468,6 +506,7 @@ export const useScriptsStore = defineStore('scripts', () => {
     createManualScript,
     streamScript,
     saveScript,
+    updateScript,
     deleteScript,
     fetchEditingFeedback,
     fetchPrediction,

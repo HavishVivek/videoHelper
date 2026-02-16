@@ -2,6 +2,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useScripts } from '@/composables/useScripts'
+import { useScriptsStore } from '@/stores/scripts'
 import { useGroq } from '@/composables/useGroq'
 import PageContainer from '@/components/layout/PageContainer.vue'
 import ScriptEditor from '@/components/script/ScriptEditor.vue'
@@ -14,10 +15,11 @@ import LoadingSkeleton from '@/components/ui/LoadingSkeleton.vue'
 
 const route = useRoute()
 const router = useRouter()
+const scriptsStore = useScriptsStore()
 const { load, save, setupAutoSave, fetchThumbnails, fetchMetadata } = useScripts()
 const { getFeedback, getPrediction } = useGroq()
 
-const script = ref(null)
+const scriptId = ref(null)
 const content = ref('')
 const feedback = ref(null)
 const retentionData = ref([])
@@ -25,6 +27,12 @@ const loadingScript = ref(true)
 const savingFeedback = ref(false)
 const lastSaved = ref(null)
 const editorMode = ref('script') // 'script' | 'packaging'
+
+// Make script reactive to store changes
+const script = computed(() => {
+  if (!scriptId.value) return null
+  return scriptsStore.scripts.find(s => s.id === scriptId.value) || scriptsStore.currentScript
+})
 
 // Text to Speech
 const isReading = ref(false)
@@ -59,19 +67,38 @@ const scoreClass = computed(() => {
 })
 let feedbackDebounce = null
 
-onMounted(async () => {
-  const id = route.params.id
-  script.value = await load(id)
-  if (script.value) {
-    content.value = script.value.content || ''
+async function loadScriptById(id) {
+  loadingScript.value = true
+
+  // Reset state when loading a new script
+  feedback.value = null
+  retentionData.value = []
+  lastSaved.value = null
+  editorMode.value = 'script'
+
+  scriptId.value = id
+  const loadedScript = await load(id)
+  if (loadedScript) {
+    content.value = loadedScript.content || ''
     setupAutoSave(id, content)
 
     // Load existing prediction if available
-    if (script.value.prediction?.retentionCurve) {
-      retentionData.value = script.value.prediction.retentionCurve
+    if (loadedScript.prediction?.retentionCurve) {
+      retentionData.value = loadedScript.prediction.retentionCurve
     }
   }
   loadingScript.value = false
+}
+
+onMounted(() => {
+  loadScriptById(route.params.id)
+})
+
+// Watch for route changes to load different scripts
+watch(() => route.params.id, (newId) => {
+  if (newId) {
+    loadScriptById(newId)
+  }
 })
 
 // Debounced feedback on edit
@@ -99,16 +126,16 @@ function handleSectionChange(section) {
 }
 
 async function handleSave() {
-  if (script.value) {
-    await save(script.value.id, content.value)
+  if (scriptId.value) {
+    await save(scriptId.value, content.value)
     lastSaved.value = new Date().toLocaleTimeString()
     window.__toast?.('Script saved', 'success')
   }
 }
 
 function goToPredictions() {
-  if (script.value) {
-    router.push(`/predictions/${script.value.id}`)
+  if (scriptId.value) {
+    router.push(`/predictions/${scriptId.value}`)
   }
 }
 </script>

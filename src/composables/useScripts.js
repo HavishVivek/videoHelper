@@ -43,6 +43,7 @@ export function useScripts() {
     loadAll,
     load,
     save,
+    update: store.updateScript,
     remove,
     setupAutoSave,
     fetchThumbnails: store.fetchThumbnails,

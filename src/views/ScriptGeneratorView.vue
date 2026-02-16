@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGroq } from '@/composables/useGroq'
 import { useScriptsStore } from '@/stores/scripts'
@@ -29,6 +29,13 @@ const introVariations = computed(() => scriptsStore.introVariations)
 const scriptVariations = computed(() => scriptsStore.scriptVariations)
 const loading = computed(() => scriptsStore.loading)
 const error = computed(() => scriptsStore.error)
+
+onMounted(() => {
+  scriptsStore.introVariations = []
+  scriptsStore.scriptVariations = []
+  scriptsStore.error = null
+  scriptsStore.loading = false
+})
 
 async function handleGenerateIntros() {
   if (!topic.value.trim()) return

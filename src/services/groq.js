@@ -1,15 +1,44 @@
 import Groq from 'groq-sdk'
 
 let client = null
+let usingLMStudio = false
 
 function getClient() {
   if (!client) {
-    client = new Groq({
-      apiKey: import.meta.env.VITE_GROQ_API_KEY,
-      dangerouslyAllowBrowser: true
-    })
+    // Check if LM Studio is configured (preferred for local/free usage)
+    const lmStudioUrl = import.meta.env.VITE_LM_STUDIO_URL || 'http://localhost:1234/v1'
+    const useLMStudio = import.meta.env.VITE_USE_LM_STUDIO === 'true'
+
+    if (useLMStudio) {
+      // Use LM Studio's OpenAI-compatible endpoint
+      client = new Groq({
+        apiKey: 'lm-studio', // LM Studio doesn't require a real API key
+        baseURL: lmStudioUrl,
+        dangerouslyAllowBrowser: true
+      })
+      usingLMStudio = true
+      console.log('🤖 Using LM Studio at:', lmStudioUrl)
+    } else {
+      // Fall back to Groq cloud API
+      client = new Groq({
+        apiKey: import.meta.env.VITE_GROQ_API_KEY,
+        dangerouslyAllowBrowser: true
+      })
+      usingLMStudio = false
+      console.log('🤖 Using Groq cloud API')
+    }
   }
   return client
+}
+
+// Get the appropriate model name based on provider
+function getModelName() {
+  if (usingLMStudio) {
+    // LM Studio uses whatever model you have loaded
+    // It typically expects 'local-model' or you can specify your model name
+    return import.meta.env.VITE_LM_STUDIO_MODEL || 'local-model'
+  }
+  return 'llama-3.3-70b-versatile'
 }
 
 const SYSTEM_PROMPTS = {
@@ -69,7 +98,7 @@ Respond in valid JSON with keys: titles (array of strings), description (string)
 export async function analyzeChannel(channelData, topVideos) {
   const groq = getClient()
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: getModelName(),
     messages: [
       { role: 'system', content: SYSTEM_PROMPTS.channelAnalysis },
       {
@@ -91,7 +120,7 @@ Analyze this channel's content patterns and what makes their top videos successf
 export async function generateIntroVariations(topic, channelAnalysis, notes = '') {
   const groq = getClient()
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: getModelName(),
     messages: [
       { role: 'system', content: SYSTEM_PROMPTS.introVariations },
       {
@@ -125,7 +154,7 @@ export async function generateFullScript(topic, selectedIntro, channelAnalysis) 
   const chunks = []
 
   const stream = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: getModelName(),
     messages: [
       { role: 'system', content: SYSTEM_PROMPTS.scriptGeneration },
       {
@@ -153,7 +182,7 @@ Generate a complete YouTube video script starting with this intro. Include secti
 export async function* streamFullScript(topic, selectedIntro, channelAnalysis) {
   const groq = getClient()
   const stream = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: getModelName(),
     messages: [
       { role: 'system', content: SYSTEM_PROMPTS.scriptGeneration },
       {
@@ -179,7 +208,7 @@ Generate a complete YouTube video script starting with this intro. Include secti
 export async function generateScriptVariations(topic, selectedIntro, channelAnalysis) {
   const groq = getClient()
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: getModelName(),
     messages: [
       { 
         role: 'system', 
@@ -224,7 +253,7 @@ Then continue the script with [BODY], [CTA], and [OUTRO] sections.`
 export async function getEditingFeedback(scriptContent, sectionType) {
   const groq = getClient()
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: getModelName(),
     messages: [
       { role: 'system', content: SYSTEM_PROMPTS.editingFeedback },
       {
@@ -250,7 +279,7 @@ Provide editing feedback for this script section.`
 export async function predictPerformance(scriptContent, channelData, topVideos) {
   const groq = getClient()
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: getModelName(),
     messages: [
       { role: 'system', content: SYSTEM_PROMPTS.performancePrediction },
       {
@@ -287,7 +316,7 @@ Predict performance for this script.`
 export async function generateThumbnailConcepts(scriptContent, topic) {
   const groq = getClient()
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: getModelName(),
     messages: [
       { role: 'system', content: SYSTEM_PROMPTS.thumbnailGeneration },
       {
@@ -317,7 +346,7 @@ Generate 3 high-CTR thumbnail concepts.`
 export async function generateMetadata(scriptContent, topic) {
   const groq = getClient()
   const response = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: getModelName(),
     messages: [
       { role: 'system', content: SYSTEM_PROMPTS.metadataOptimizer },
       {

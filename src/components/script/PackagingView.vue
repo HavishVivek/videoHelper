@@ -4,6 +4,7 @@ import { useScriptsStore } from '@/stores/scripts'
 import GlassCard from '@/components/ui/GlassCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
+import BaseInput from '@/components/ui/BaseInput.vue'
 
 const props = defineProps({
   script: {
@@ -14,31 +15,70 @@ const props = defineProps({
 
 const store = useScriptsStore()
 const loading = ref(false)
+const loadingThumb = ref(false)
+const thumbnailError = ref('')
+const generatingTitle = ref(false)
+const generatedTitle = ref('')
 
 const hasPackaging = computed(() => {
-  return (props.script.thumbnails && props.script.thumbnails.length > 0) || 
+  return (props.script.thumbnailUrl) || 
          (props.script.metadata && props.script.metadata.titles)
 })
 
 async function generateAll() {
   loading.value = true
-  await Promise.all([
-    store.fetchThumbnails(props.script.id),
-    store.fetchMetadata(props.script.id)
-  ])
+  await store.fetchMetadata(props.script.id)
   loading.value = false
 }
 
-function getThumbnailUrl(thumb) {
-  // Keep prompt concise to avoid URL issues
-  const desc = thumb.description.length > 80 ? thumb.description.substring(0, 80) + '...' : thumb.description
-  const text = thumb.textOverlay.replace(/[^\w\s]/g, '') // Remove special chars form text
-  const prompt = `YouTube thumbnail, ${desc}, text "${text}" big bold font, ${thumb.colorMood} style, 4k`
+async function handleFileUpload(event) {
+  const file = event.target.files[0]
+  if (!file) return
   
-  // Use a simple random seed based on description length to keep it consistent but unique per card
-  const seed = thumb.description.length + thumb.textOverlay.length
+  // Validation: Max 1MB
+  if (file.size > 1024 * 1024) {
+    thumbnailError.value = 'File too large (Max 1MB)'
+    return
+  }
   
-  return `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&model=flux&nologo=true&seed=${seed}`
+  loadingThumb.value = true
+  thumbnailError.value = ''
+  
+  try {
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      const base64 = e.target.result
+      await store.updateScript(props.script.id, { thumbnailUrl: base64 })
+      window.__toast?.('Thumbnail uploaded', 'success')
+      loadingThumb.value = false
+    }
+    reader.onerror = () => {
+      thumbnailError.value = 'Failed to read file'
+      loadingThumb.value = false
+    }
+    reader.readAsDataURL(file)
+  } catch (e) {
+    thumbnailError.value = 'Upload failed'
+    loadingThumb.value = false
+  }
+}
+
+async function generateTitleForThumbnail() {
+  generatingTitle.value = true
+  
+  // Simulate AI analysis delay
+  setTimeout(() => {
+    // Generate a contextual title based on topic
+    const templates = [
+      `The Truth About ${props.script.topic}`,
+      `Why ${props.script.topic} Changes Everything`,
+      `Stop doing ${props.script.topic} wrong!`,
+      `${props.script.topic} Explained in 5 Minutes`,
+      `The Ultimate Guide to ${props.script.topic}`
+    ]
+    generatedTitle.value = templates[Math.floor(Math.random() * templates.length)]
+    generatingTitle.value = false
+  }, 1500)
 }
 
 function copyToClipboard(text) {
@@ -105,43 +145,45 @@ function copyToClipboard(text) {
 
       <!-- Thumbnails -->
       <section class="packaging-section">
-        <h3 class="section-title">Thumbnail Concepts</h3>
-        <div class="thumbnails-grid">
-          <GlassCard 
-            v-for="(thumb, i) in script.thumbnails" 
-            :key="i" 
-            padding="none" 
-            :hover="true"
-            class="thumb-card"
-          >
-            <div class="thumb-image-container">
-              <img 
-                :src="getThumbnailUrl(thumb)" 
-                alt="AI Generated Thumbnail" 
-                class="thumb-image"
-                loading="lazy"
-              />
+        <h3 class="section-title">Thumbnail Image</h3>
+        <GlassCard padding="lg" :hover="false">
+          <div class="thumbnail-updater">
+            <div class="input-group file-input-group">
+              <label class="file-upload-btn">
+                <input type="file" accept="image/*" @change="handleFileUpload" class="hidden-input" />
+                <span v-if="loadingThumb">Uploading...</span>
+                <span v-else>Start Upload from Computer</span>
+              </label>
+              <div v-if="thumbnailError" class="error-text">{{ thumbnailError }}</div>
             </div>
             
-            <div class="thumb-content-wrapper">
-              <div class="thumb-header">
-                <BaseBadge variant="accent">Concept {{ i + 1 }}</BaseBadge>
-                <span class="thumb-psych">{{ thumb.psychology }}</span>
+            <div v-if="script.thumbnailUrl" class="thumb-preview-container">
+              <div class="preview-header">
+                <h4>Current Thumbnail</h4>
+                <BaseButton 
+                  size="sm" 
+                  variant="accent" 
+                  @click="generateTitleForThumbnail"
+                  :loading="generatingTitle"
+                >
+                  Generate Title for this
+                </BaseButton>
               </div>
+              <img :src="script.thumbnailUrl" alt="Thumbnail Preview" class="thumb-preview-img" />
               
-              <div class="thumb-content">
-                <h4>Visual</h4>
-                <p>{{ thumb.description }}</p>
-                
-                <h4>Text Overlay</h4>
-                <div class="overlay-box">{{ thumb.textOverlay }}</div>
-                
-                <h4>Mood</h4>
-                <p class="mood-text">{{ thumb.colorMood }}</p>
+              <div v-if="generatedTitle" class="generated-title-box">
+                <label>Suggested Title:</label>
+                <div class="title-content">
+                  {{ generatedTitle }}
+                  <button class="copy-btn" @click="copyToClipboard(generatedTitle)">Copy</button>
+                </div>
               </div>
             </div>
-          </GlassCard>
-        </div>
+            <div v-else class="empty-thumb-placeholder">
+              <p>No thumbnail attached. Upload an image to add one.</p>
+            </div>
+          </div>
+        </GlassCard>
       </section>
       
       <div class="actions-footer">
@@ -283,80 +325,109 @@ function copyToClipboard(text) {
   margin-left: var(--space-xs);
 }
 
-/* Thumbnails */
-.thumbnails-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: var(--space-md);
+/* Thumbnail Manual Input */
+.file-input-group {
+  flex-direction: column;
+  align-items: stretch;
 }
 
-.thumb-card {
-  height: 100%;
+.file-upload-btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: var(--space-xl);
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background: var(--color-bg-input);
+  transition: all 0.2s;
+  color: var(--color-text-secondary);
+  font-weight: 500;
 }
 
-.thumb-header {
+.file-upload-btn:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  background: rgba(var(--color-accent-rgb), 0.05);
+}
+
+.hidden-input {
+  display: none;
+}
+
+.error-text {
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-xs);
+  text-align: center;
+}
+
+.thumb-preview-container {
+  margin-top: var(--space-lg);
+}
+
+.preview-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--space-md);
+  margin-bottom: var(--space-sm);
 }
 
-.thumb-psych {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-  font-style: italic;
+.thumb-preview-container h4 {
+  margin-bottom: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.thumb-image-container {
+.thumb-preview-img {
   width: 100%;
+  max-width: 480px;
   aspect-ratio: 16/9;
-  background: var(--color-bg-input);
-  overflow: hidden;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.thumb-image {
-  width: 100%;
-  height: 100%;
   object-fit: cover;
-  transition: transform 0.3s ease;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
-.thumb-card:hover .thumb-image {
-  transform: scale(1.05);
-}
-
-.thumb-content-wrapper {
+.generated-title-box {
+  margin-top: var(--space-md);
   padding: var(--space-md);
+  background: var(--color-bg-input);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--color-accent);
+  animation: slideDown 0.3s ease-out;
 }
 
-.thumb-content h4 {
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.generated-title-box label {
+  display: block;
   font-size: var(--font-size-xs);
   text-transform: uppercase;
   color: var(--color-text-muted);
   margin-bottom: 4px;
-  margin-top: var(--space-md);
 }
 
-.thumb-content h4:first-child {
-  margin-top: 0;
+.title-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  color: var(--color-text-primary);
 }
 
-.overlay-box {
-  background: var(--color-error);
-  color: white;
-  padding: 8px;
-  font-weight: 800;
-  text-transform: uppercase;
-  display: inline-block;
-  transform: rotate(-2deg);
-  font-size: var(--font-size-lg);
-  margin: var(--space-xs) 0;
-}
-
-.mood-text {
+.empty-thumb-placeholder {
+  padding: var(--space-xl);
+  text-align: center;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
 }
 
 .actions-footer {
