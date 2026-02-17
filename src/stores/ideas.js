@@ -1,14 +1,42 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { db } from '@/services/firebase'
-import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, query, where, orderBy } from 'firebase/firestore'
+import { db, firebaseConfigured } from '@/services/firebase'
+import { collection, addDoc, updateDoc, deleteDoc, doc, getDocs, query, where } from 'firebase/firestore'
 import { useAuthStore } from '@/stores/auth'
+
+// --- localStorage helpers (userId-scoped) ---
+function lsKey(userId, id) {
+  return `idea_${userId}_${id}`
+}
+
+function lsSet(userId, id, data) {
+  const key = lsKey(userId, id)
+  const existing = localStorage.getItem(key)
+  const merged = existing ? { ...JSON.parse(existing), ...data } : data
+  localStorage.setItem(key, JSON.stringify(merged))
+}
+
+function lsGetAll(userId) {
+  const ideas = []
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i)
+    if (key?.startsWith(`idea_${userId}_`)) {
+      const data = localStorage.getItem(key)
+      if (data) ideas.push(JSON.parse(data))
+    }
+  }
+  return ideas
+}
+
+function lsDelete(userId, id) {
+  localStorage.removeItem(lsKey(userId, id))
+}
 
 export const useIdeasStore = defineStore('ideas', () => {
   const ideas = ref([])
   const loading = ref(false)
   const error = ref(null)
-  
+
   // Getters
   const upcomingScripting = computed(() => {
     return ideas.value
@@ -27,25 +55,33 @@ export const useIdeasStore = defineStore('ideas', () => {
     const authStore = useAuthStore()
     if (!authStore.user) return
 
+    const userId = authStore.user.uid
     loading.value = true
     try {
-      const q = query(
-        collection(db, 'ideas'),
-        where('userId', '==', authStore.user.uid)
-      )
-      
-      const querySnapshot = await getDocs(q)
-      const loadedIdeas = []
-      querySnapshot.forEach((doc) => {
-        loadedIdeas.push({ id: doc.id, ...doc.data() })
-      })
-      
-      // Sort locally by createdAt desc
-      ideas.value = loadedIdeas.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      
+      if (firebaseConfigured && db) {
+        const q = query(
+          collection(db, 'ideas'),
+          where('userId', '==', userId)
+        )
+        const querySnapshot = await getDocs(q)
+        const loadedIdeas = []
+        querySnapshot.forEach((d) => {
+          const idea = { id: d.id, ...d.data() }
+          loadedIdeas.push(idea)
+          // Keep localStorage in sync
+          lsSet(userId, d.id, idea)
+        })
+        ideas.value = loadedIdeas.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      } else {
+        // Firestore not configured — load from localStorage
+        const localIdeas = lsGetAll(userId)
+        ideas.value = localIdeas.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      }
     } catch (e) {
-      console.error('Error loading ideas form Firestore:', e)
+      console.warn('Error loading ideas from Firestore, falling back to localStorage:', e)
       error.value = e.message
+      const localIdeas = lsGetAll(userId)
+      ideas.value = localIdeas.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     } finally {
       loading.value = false
     }
@@ -58,8 +94,11 @@ export const useIdeasStore = defineStore('ideas', () => {
       return
     }
 
+    const userId = authStore.user.uid
+    const tempId = `idea_${Date.now()}`
     const newIdea = {
-      userId: authStore.user.uid,
+      id: tempId,
+      userId,
       topic,
       status: 'idea',
       createdAt: new Date().toISOString(),
@@ -67,44 +106,74 @@ export const useIdeasStore = defineStore('ideas', () => {
       scheduledFilmDate: null
     }
 
+    // Optimistic UI — add immediately so it doesn't disappear
+    ideas.value.unshift(newIdea)
+
     try {
-      const docRef = await addDoc(collection(db, 'ideas'), newIdea)
-      const ideaWithId = { id: docRef.id, ...newIdea }
-      ideas.value.unshift(ideaWithId)
-      return ideaWithId
+      if (firebaseConfigured && db) {
+        const { id: _tempId, ...ideaData } = newIdea
+        const docRef = await addDoc(collection(db, 'ideas'), ideaData)
+        // Replace the temp entry with the real Firestore ID
+        const index = ideas.value.findIndex(i => i.id === tempId)
+        if (index !== -1) {
+          ideas.value[index] = { ...newIdea, id: docRef.id }
+        }
+        // Save real ID to localStorage, clean up temp key
+        lsSet(userId, docRef.id, { ...newIdea, id: docRef.id })
+        lsDelete(userId, tempId)
+        return ideas.value[index]
+      } else {
+        // Firestore not available — persist with temp ID in localStorage
+        lsSet(userId, tempId, newIdea)
+        return newIdea
+      }
     } catch (e) {
-      console.error('Error adding idea:', e)
+      console.warn('Error saving idea to Firestore, keeping in localStorage:', e)
+      // Keep the optimistic item and save to localStorage so it persists
+      lsSet(userId, tempId, newIdea)
       error.value = e.message
+      return newIdea
     }
   }
 
   async function updateIdea(id, updates) {
+    const authStore = useAuthStore()
+    const userId = authStore.user?.uid
+
     // Optimistic UI update
     const index = ideas.value.findIndex(i => i.id === id)
     if (index !== -1) {
       Object.assign(ideas.value[index], updates)
+      if (userId) lsSet(userId, id, ideas.value[index])
     }
 
     try {
-      const docRef = doc(db, 'ideas', id)
-      await updateDoc(docRef, updates)
+      if (firebaseConfigured && db) {
+        await updateDoc(doc(db, 'ideas', id), updates)
+      }
     } catch (e) {
-      console.error('Error updating idea:', e)
+      console.warn('Error updating idea in Firestore:', e)
       error.value = e.message
-      // Revert if needed, but rarely fails unless permission error
     }
   }
 
   async function deleteIdea(id) {
+    const authStore = useAuthStore()
+    const userId = authStore.user?.uid
+
     // Optimistic UI update
     const originalIdeas = [...ideas.value]
     ideas.value = ideas.value.filter(i => i.id !== id)
+    if (userId) lsDelete(userId, id)
 
     try {
-      await deleteDoc(doc(db, 'ideas', id))
+      if (firebaseConfigured && db) {
+        await deleteDoc(doc(db, 'ideas', id))
+      }
     } catch (e) {
       console.error('Error deleting idea:', e)
-      ideas.value = originalIdeas // Revert
+      ideas.value = originalIdeas // Revert UI
+      if (userId) lsSet(userId, id, originalIdeas.find(i => i.id === id))
       error.value = e.message
     }
   }
