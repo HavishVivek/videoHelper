@@ -109,6 +109,10 @@ export const useScriptsStore = defineStore('scripts', () => {
     return [...scripts.value].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
   })
 
+  function getScriptByIdeaId(ideaId) {
+    return scripts.value.find(s => s.ideaId === ideaId) || null
+  }
+
 // ...
 // ...
 
@@ -264,7 +268,7 @@ export const useScriptsStore = defineStore('scripts', () => {
     }
   }
 
-  async function selectScriptVariation(topic, selectedIntro, variationContent) {
+  async function selectScriptVariation(topic, selectedIntro, variationContent, ideaId = null) {
     console.log('=== selectScriptVariation START ===')
     const authStore = useAuthStore()
     const channelStore = useChannelStore()
@@ -295,6 +299,7 @@ export const useScriptsStore = defineStore('scripts', () => {
         topic,
         selectedIntro,
         content: variationContent,
+        ideaId: ideaId || null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -323,7 +328,7 @@ export const useScriptsStore = defineStore('scripts', () => {
     }
   }
 
-  async function createManualScript(topic, content) {
+  async function createManualScript(topic, content, ideaId = null) {
     const authStore = useAuthStore()
     const channelStore = useChannelStore()
     generating.value = true
@@ -338,6 +343,7 @@ export const useScriptsStore = defineStore('scripts', () => {
         topic,
         content,
         isManual: true,
+        ideaId: ideaId || null,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
@@ -490,6 +496,17 @@ export const useScriptsStore = defineStore('scripts', () => {
     }
   }
 
+  async function linkScriptToIdea(scriptId, ideaId) {
+    try {
+      await fsSet('scripts', scriptId, { ideaId, updatedAt: new Date().toISOString() })
+      const script = scripts.value.find(s => s.id === scriptId)
+      if (script) script.ideaId = ideaId
+      if (currentScript.value?.id === scriptId) currentScript.value.ideaId = ideaId
+    } catch (e) {
+      error.value = e.message
+    }
+  }
+
   async function updateScript(id, updates) {
     try {
       if (!updates.updatedAt) {
@@ -519,6 +536,7 @@ export const useScriptsStore = defineStore('scripts', () => {
     generating,
     error,
     sortedScripts,
+    getScriptByIdeaId,
     loadScripts,
     loadScript,
     generateIntros,
@@ -530,6 +548,7 @@ export const useScriptsStore = defineStore('scripts', () => {
     saveScript,
     updateScript,
     deleteScript,
+    linkScriptToIdea,
     fetchEditingFeedback,
     fetchPrediction,
     fetchThumbnails,

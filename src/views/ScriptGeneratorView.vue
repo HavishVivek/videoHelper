@@ -21,6 +21,7 @@ const channelStore = useChannelStore()
 
 const topic = ref('')
 const notes = ref('')
+const ideaId = ref(null)
 const selectedIntroIndex = ref(-1)
 const selectedVariationIndex = ref(-1)
 const step = ref('topic') // topic | intros | variations | done
@@ -39,6 +40,9 @@ onMounted(() => {
 
   if (route.query.topic) {
     topic.value = route.query.topic
+  }
+  if (route.query.ideaId) {
+    ideaId.value = route.query.ideaId
   }
 })
 
@@ -84,7 +88,8 @@ async function handleFinalizeScript() {
     const result = await selectScriptVariation(
       topic.value,
       intro.introText || intro.intro_text || JSON.stringify(intro),
-      variation.content
+      variation.content,
+      ideaId.value
     )
     
     console.log('Result from selectScriptVariation:', result)

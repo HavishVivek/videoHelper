@@ -41,9 +41,9 @@ export function useGroq() {
     return await scriptsStore.generateScriptVariations(topic, selectedIntro)
   }
 
-  async function selectScriptVariation(topic, selectedIntro, variationContent) {
+  async function selectScriptVariation(topic, selectedIntro, variationContent, ideaId = null) {
     console.log('useGroq.selectScriptVariation called with:', { topic, selectedIntro, contentLength: variationContent?.length })
-    const result = await scriptsStore.selectScriptVariation(topic, selectedIntro, variationContent)
+    const result = await scriptsStore.selectScriptVariation(topic, selectedIntro, variationContent, ideaId)
     console.log('useGroq.selectScriptVariation result:', result)
     return result
   }
