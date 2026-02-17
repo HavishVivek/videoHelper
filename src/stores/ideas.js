@@ -103,7 +103,9 @@ export const useIdeasStore = defineStore('ideas', () => {
       status: 'idea',
       createdAt: new Date().toISOString(),
       scheduledScriptDate: null,
-      scheduledFilmDate: null
+      scheduledScriptEndDate: null,
+      scheduledFilmDate: null,
+      scheduledFilmEndDate: null
     }
 
     // Optimistic UI — add immediately so it doesn't disappear

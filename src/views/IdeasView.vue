@@ -77,23 +77,49 @@ function handleDelete(id) {
           </div>
 
           <div class="schedule-section">
-            <div class="date-field">
-              <label>Scripting Date</label>
-              <input 
-                type="date" 
-                :value="idea.scheduledScriptDate" 
-                @input="e => updateDate(idea, 'scheduledScriptDate', e)"
-                class="date-input"
-              />
+            <div class="date-range-field">
+              <span class="date-range-label">📝 Scripting</span>
+              <div class="date-range-inputs">
+                <input
+                  type="date"
+                  :value="idea.scheduledScriptDate"
+                  @input="e => updateDate(idea, 'scheduledScriptDate', e)"
+                  class="date-input"
+                  title="Start date"
+                />
+                <span class="range-sep">→</span>
+                <input
+                  type="date"
+                  :value="idea.scheduledScriptEndDate"
+                  :min="idea.scheduledScriptDate"
+                  @input="e => updateDate(idea, 'scheduledScriptEndDate', e)"
+                  class="date-input"
+                  title="End date (optional)"
+                  :disabled="!idea.scheduledScriptDate"
+                />
+              </div>
             </div>
-            <div class="date-field">
-              <label>Filming Date</label>
-              <input 
-                type="date" 
-                :value="idea.scheduledFilmDate" 
-                @input="e => updateDate(idea, 'scheduledFilmDate', e)"
-                class="date-input"
-              />
+            <div class="date-range-field">
+              <span class="date-range-label">🎥 Filming</span>
+              <div class="date-range-inputs">
+                <input
+                  type="date"
+                  :value="idea.scheduledFilmDate"
+                  @input="e => updateDate(idea, 'scheduledFilmDate', e)"
+                  class="date-input"
+                  title="Start date"
+                />
+                <span class="range-sep">→</span>
+                <input
+                  type="date"
+                  :value="idea.scheduledFilmEndDate"
+                  :min="idea.scheduledFilmDate"
+                  @input="e => updateDate(idea, 'scheduledFilmEndDate', e)"
+                  class="date-input"
+                  title="End date (optional)"
+                  :disabled="!idea.scheduledFilmDate"
+                />
+              </div>
             </div>
           </div>
 
@@ -184,25 +210,45 @@ function handleDelete(id) {
   border-radius: var(--radius-sm);
 }
 
-.date-field {
+.date-range-field {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.date-field label {
+.date-range-label {
   font-size: var(--font-size-xs);
   color: var(--color-text-secondary);
+  font-weight: 600;
+}
+
+.date-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.range-sep {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
 }
 
 .date-input {
   background: var(--color-bg-input);
   border: 1px solid var(--color-border);
   color: var(--color-text-primary);
-  padding: 4px 8px;
+  padding: 4px 6px;
   border-radius: 4px;
   font-family: inherit;
   font-size: var(--font-size-sm);
+  flex: 1;
+  min-width: 0;
+}
+
+.date-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .card-actions {
