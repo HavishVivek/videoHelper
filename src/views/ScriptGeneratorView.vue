@@ -1,6 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useGroq } from '@/composables/useGroq'
 import { useScriptsStore } from '@/stores/scripts'
 import { useChannelStore } from '@/stores/channel'
@@ -14,6 +14,7 @@ import ScriptVariation from '@/components/script/ScriptVariation.vue'
 import LoadingSkeleton from '@/components/ui/LoadingSkeleton.vue'
 
 const router = useRouter()
+const route = useRoute()
 const { generateIntros, generateScriptVariations, selectScriptVariation } = useGroq()
 const scriptsStore = useScriptsStore()
 const channelStore = useChannelStore()
@@ -35,6 +36,10 @@ onMounted(() => {
   scriptsStore.scriptVariations = []
   scriptsStore.error = null
   scriptsStore.loading = false
+
+  if (route.query.topic) {
+    topic.value = route.query.topic
+  }
 })
 
 async function handleGenerateIntros() {
