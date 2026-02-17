@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { db, firebaseConfigured } from '@/services/firebase'
+import { collection, query, where, getDocs, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore'
 import { generateIntroVariations, generateFullScript, getEditingFeedback, predictPerformance, streamFullScript, generateScriptVariations as generateScriptVariationsAPI, generateThumbnailConcepts, generateMetadata } from '@/services/groq'
 import { useAuthStore } from './auth'
 import { useChannelStore } from './channel'
@@ -40,10 +41,10 @@ function lsDelete(path, id) {
 }
 
 // Firebase functions with localStorage fallback strategy
+// Firebase functions with localStorage fallback strategy
 async function fsSet(path, id, data) {
   if (firebaseConfigured && db) {
     try {
-      const { doc, setDoc } = await import('firebase/firestore')
       await setDoc(doc(db, path, id), data, { merge: true })
       return
     } catch (e) {
@@ -57,7 +58,6 @@ async function fsSet(path, id, data) {
 async function fsGet(path, id) {
   if (firebaseConfigured && db) {
     try {
-      const { doc, getDoc } = await import('firebase/firestore')
       const snap = await getDoc(doc(db, path, id))
       return snap.exists() ? { id: snap.id, ...snap.data() } : null
     } catch (e) {
@@ -71,7 +71,6 @@ async function fsGet(path, id) {
 async function fsGetAll(path) {
   if (firebaseConfigured && db) {
     try {
-      const { collection, getDocs } = await import('firebase/firestore')
       const snap = await getDocs(collection(db, path))
       return snap.docs.map(d => ({ id: d.id, ...d.data() }))
     } catch (e) {
@@ -85,7 +84,6 @@ async function fsGetAll(path) {
 async function fsDelete(path, id) {
   if (firebaseConfigured && db) {
     try {
-      const { doc, deleteDoc } = await import('firebase/firestore')
       await deleteDoc(doc(db, path, id))
       return
     } catch (e) {
@@ -111,32 +109,56 @@ export const useScriptsStore = defineStore('scripts', () => {
     return [...scripts.value].sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
   })
 
+// ...
+// ...
+
   async function loadScripts() {
     const authStore = useAuthStore()
     if (!authStore.user) return
+    
+    // Clear list first
+    scripts.value = []
+    loading.value = true
 
-    try {
-      const all = await fsGetAll('scripts')
+    if (firebaseConfigured && db) {
+      try {
+        const q = query(
+          collection(db, 'scripts'), 
+          where('userId', '==', authStore.user.uid)
+        )
+        const snap = await getDocs(q)
+        const loaded = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        
+        // Sort by updatedAt desc
+        scripts.value = loaded.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+      } catch (e) {
+        console.error('Firebase loadScripts error:', e)
+        // Fallback to local storage only on error
+        const all = lsGetAll('scripts')
+        scripts.value = all.filter(d => d.userId === authStore.user.uid)
+      }
+    } else {
+      // Offline/No-Firebase fallback
+      const all = lsGetAll('scripts')
       scripts.value = all.filter(d => d.userId === authStore.user.uid)
-    } catch (e) {
-      console.error('Load scripts error:', e)
     }
+    
+    loading.value = false
   }
 
   async function loadScript(scriptId) {
-    console.log('Loading script with ID:', scriptId)
+    loading.value = true
     try {
+      // Try Firebase first
       const data = await fsGet('scripts', scriptId)
       if (data) {
-        console.log('Script loaded successfully:', data.id)
         currentScript.value = data
-        return currentScript.value
-      } else {
-        console.warn('Script not found:', scriptId)
+        return data
       }
     } catch (e) {
       console.error('Error loading script:', e)
-      error.value = e.message
+    } finally {
+      loading.value = false
     }
     return null
   }
