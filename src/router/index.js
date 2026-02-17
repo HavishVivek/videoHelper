@@ -36,6 +36,18 @@ const routes = [
     name: 'Predictions',
     component: () => import('@/views/PredictionsView.vue'),
     meta: { requiresAuth: true }
+  },
+  {
+    path: '/ideas',
+    name: 'Ideas',
+    component: () => import('@/views/IdeasView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/calendar',
+    name: 'Calendar',
+    component: () => import('@/views/CalendarView.vue'),
+    meta: { requiresAuth: true }
   }
 ]
 

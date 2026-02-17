@@ -12,6 +12,8 @@ const scriptsStore = useScriptsStore()
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: 'grid' },
+  { path: '/ideas', label: 'Ideas Board', icon: 'bulb' },
+  { path: '/calendar', label: 'Calendar', icon: 'calendar' },
   { path: '/channel', label: 'Channel', icon: 'tv' },
   { path: '/generate', label: 'Generate Script', icon: 'pen' },
 ]
@@ -32,6 +34,15 @@ const recentScripts = computed(() => scriptsStore.sortedScripts.slice(0, 5))
         <svg v-if="item.icon === 'grid'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
           <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+        </svg>
+        <svg v-else-if="item.icon === 'bulb'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z" />
+          <path d="M9 21h6" />
+        </svg>
+        <svg v-else-if="item.icon === 'calendar'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+          <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="3" y1="10" x2="21" y2="10" />
         </svg>
         <svg v-else-if="item.icon === 'tv'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="2" y="7" width="20" height="15" rx="2" /><polyline points="17 2 12 7 7 2" />
