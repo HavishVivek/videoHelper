@@ -17,6 +17,11 @@ const newTopic = ref('')
 const showLinkModal = ref(false)
 const linkingIdea = ref(null)
 
+// Idea action modal
+const showIdeaModal = ref(false)
+const activeIdea = ref(null)
+const newSubtaskText = ref('')
+
 onMounted(() => {
   store.loadIdeas()
   scriptsStore.loadScripts()
@@ -32,13 +37,52 @@ function getLinkedScript(idea) {
   return scriptsStore.getScriptByIdeaId(idea.id)
 }
 
-function openIdea(idea) {
-  const linked = getLinkedScript(idea)
-  if (linked) {
-    router.push(`/editor/${linked.id}`)
-  } else {
-    router.push({ name: 'ScriptGenerator', query: { topic: idea.topic, ideaId: idea.id } })
-  }
+// Open the idea action modal instead of navigating directly
+function openIdeaModal(idea) {
+  activeIdea.value = idea
+  newSubtaskText.value = ''
+  showIdeaModal.value = true
+}
+
+function closeIdeaModal() {
+  showIdeaModal.value = false
+  activeIdea.value = null
+  newSubtaskText.value = ''
+}
+
+function goScriptIdea() {
+  const idea = activeIdea.value
+  closeIdeaModal()
+  router.push({ name: 'ScriptGenerator', query: { topic: idea.topic, ideaId: idea.id } })
+}
+
+function goOpenScript() {
+  const linked = getLinkedScript(activeIdea.value)
+  closeIdeaModal()
+  router.push(`/editor/${linked.id}`)
+}
+
+// Subtask actions — operate on the reactive idea in the store
+const activeIdeaSubtasks = computed(() => {
+  if (!activeIdea.value) return []
+  const live = store.ideas.find(i => i.id === activeIdea.value.id)
+  return live?.subtasks || []
+})
+
+async function handleAddSubtask() {
+  if (!newSubtaskText.value.trim() || !activeIdea.value) return
+  await store.addSubtask(activeIdea.value.id, newSubtaskText.value.trim())
+  newSubtaskText.value = ''
+}
+
+async function handleToggleSubtask(subtaskId) {
+  if (!activeIdea.value) return
+  await store.toggleSubtask(activeIdea.value.id, subtaskId)
+}
+
+async function handleDeleteSubtask(subtaskId) {
+  if (!activeIdea.value) return
+  await store.deleteSubtask(activeIdea.value.id, subtaskId)
 }
 
 function openLinkModal(idea) {
@@ -108,16 +152,29 @@ function formatDate(iso) {
           padding="md"
         >
           <div class="card-header">
-            <button class="topic-btn" @click="openIdea(idea)" :title="getLinkedScript(idea) ? 'Open script' : 'Generate script'">
+            <button class="topic-btn" @click="openIdeaModal(idea)">
               {{ idea.topic }}
             </button>
-            <button @click="handleDelete(idea.id)" class="delete-btn" title="Delete">×</button>
+            <button @click.stop="handleDelete(idea.id)" class="delete-btn" title="Delete">×</button>
           </div>
 
           <!-- Script status badge -->
           <div v-if="getLinkedScript(idea)" class="script-badge">
             <span class="badge-dot"></span>
             Script ready &mdash; {{ formatDate(getLinkedScript(idea).updatedAt) }}
+          </div>
+
+          <!-- Subtask progress -->
+          <div v-if="(idea.subtasks || []).length" class="subtask-preview">
+            <span class="subtask-count">
+              {{ (idea.subtasks || []).filter(s => s.completed).length }}/{{ (idea.subtasks || []).length }} tasks
+            </span>
+            <div class="subtask-bar">
+              <div
+                class="subtask-bar-fill"
+                :style="{ width: ((idea.subtasks || []).filter(s => s.completed).length / (idea.subtasks || []).length * 100) + '%' }"
+              ></div>
+            </div>
           </div>
 
           <div class="schedule-section">
@@ -172,7 +229,7 @@ function formatDate(iso) {
               size="sm"
               :variant="getLinkedScript(idea) ? 'primary' : 'secondary'"
               class="action-btn"
-              @click="openIdea(idea)"
+              @click="openIdeaModal(idea)"
             >
               {{ getLinkedScript(idea) ? 'Open Script' : 'Write Script' }}
             </BaseButton>
@@ -182,7 +239,7 @@ function formatDate(iso) {
               variant="ghost"
               class="link-btn"
               title="Link an existing script"
-              @click="openLinkModal(idea)"
+              @click.stop="openLinkModal(idea)"
             >
               🔗 Link
             </BaseButton>
@@ -190,6 +247,69 @@ function formatDate(iso) {
         </GlassCard>
       </div>
     </section>
+
+    <!-- Idea Action Modal -->
+    <BaseModal v-model="showIdeaModal" :title="activeIdea?.topic" maxWidth="560px">
+      <div v-if="activeIdea" class="idea-modal-body">
+
+        <!-- Script action — only show if no script yet -->
+        <div v-if="!getLinkedScript(activeIdea)" class="modal-action-block">
+          <p class="modal-block-label">Script</p>
+          <BaseButton block @click="goScriptIdea">
+            ✍️ Write Script for this Idea
+          </BaseButton>
+        </div>
+
+        <!-- Script exists — show link to open it -->
+        <div v-else class="modal-action-block">
+          <p class="modal-block-label">Script</p>
+          <button class="open-script-link" @click="goOpenScript">
+            ✅ Script ready — Open in Editor →
+          </button>
+        </div>
+
+        <div class="modal-divider"></div>
+
+        <!-- Subtasks section -->
+        <div class="subtasks-section">
+          <p class="modal-block-label">Subtasks</p>
+
+          <!-- Add subtask input -->
+          <form class="add-subtask-form" @submit.prevent="handleAddSubtask">
+            <input
+              v-model="newSubtaskText"
+              class="subtask-input"
+              placeholder="Add a subtask..."
+              maxlength="200"
+            />
+            <button type="submit" class="subtask-add-btn" :disabled="!newSubtaskText.trim()">+</button>
+          </form>
+
+          <!-- Subtask list -->
+          <ul v-if="activeIdeaSubtasks.length" class="subtask-list">
+            <li
+              v-for="subtask in activeIdeaSubtasks"
+              :key="subtask.id"
+              class="subtask-item"
+              :class="{ completed: subtask.completed }"
+            >
+              <button class="subtask-check" @click="handleToggleSubtask(subtask.id)">
+                <svg v-if="subtask.completed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </button>
+              <span class="subtask-text">{{ subtask.text }}</span>
+              <button class="subtask-delete" @click="handleDeleteSubtask(subtask.id)" title="Remove">×</button>
+            </li>
+          </ul>
+          <p v-else class="subtask-empty">No subtasks yet. Add one above.</p>
+        </div>
+      </div>
+
+      <template #footer>
+        <BaseButton variant="secondary" @click="closeIdeaModal">Close</BaseButton>
+      </template>
+    </BaseModal>
 
     <!-- Link Script Modal -->
     <BaseModal v-model="showLinkModal" title="Link an existing script" maxWidth="560px">
@@ -425,5 +545,209 @@ function formatDate(iso) {
 .script-item-meta {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+}
+
+/* Subtask progress bar on card */
+.subtask-preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.subtask-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.subtask-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--color-bg-input);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.subtask-bar-fill {
+  height: 100%;
+  background: var(--color-accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+/* Idea action modal */
+.idea-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.modal-block-label {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin-bottom: var(--space-sm);
+  font-weight: 600;
+}
+
+.modal-action-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.open-script-link {
+  background: none;
+  border: 1px solid var(--color-success, #4ade80);
+  color: var(--color-success, #4ade80);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.open-script-link:hover {
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.modal-divider {
+  height: 1px;
+  background: var(--color-border);
+}
+
+/* Subtasks */
+.subtasks-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.add-subtask-form {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.subtask-input {
+  flex: 1;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.subtask-input:focus {
+  border-color: var(--color-accent);
+}
+
+.subtask-add-btn {
+  background: var(--color-accent);
+  color: #000;
+  border: none;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  font-size: var(--font-size-lg);
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity var(--transition-fast);
+}
+
+.subtask-add-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.subtask-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.subtask-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-fast);
+}
+
+.subtask-item:hover {
+  background: var(--color-bg-card);
+}
+
+.subtask-check {
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--color-border);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+  color: var(--color-accent);
+}
+
+.subtask-item.completed .subtask-check {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #000;
+}
+
+.subtask-text {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-primary);
+  transition: all var(--transition-fast);
+}
+
+.subtask-item.completed .subtask-text {
+  text-decoration: line-through;
+  color: var(--color-text-muted);
+}
+
+.subtask-delete {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-md);
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity var(--transition-fast), color var(--transition-fast);
+}
+
+.subtask-item:hover .subtask-delete {
+  opacity: 1;
+}
+
+.subtask-delete:hover {
+  color: var(--color-error);
+}
+
+.subtask-empty {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+  padding: var(--space-md) 0;
 }
 </style>

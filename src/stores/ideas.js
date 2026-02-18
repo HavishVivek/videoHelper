@@ -138,6 +138,36 @@ export const useIdeasStore = defineStore('ideas', () => {
     }
   }
 
+  async function addSubtask(ideaId, text) {
+    const subtask = {
+      id: `st_${Date.now()}`,
+      text,
+      completed: false,
+      createdAt: new Date().toISOString()
+    }
+    const idea = ideas.value.find(i => i.id === ideaId)
+    if (!idea) return
+    const updatedSubtasks = [...(idea.subtasks || []), subtask]
+    await updateIdea(ideaId, { subtasks: updatedSubtasks })
+    return subtask
+  }
+
+  async function toggleSubtask(ideaId, subtaskId) {
+    const idea = ideas.value.find(i => i.id === ideaId)
+    if (!idea) return
+    const updatedSubtasks = (idea.subtasks || []).map(st =>
+      st.id === subtaskId ? { ...st, completed: !st.completed } : st
+    )
+    await updateIdea(ideaId, { subtasks: updatedSubtasks })
+  }
+
+  async function deleteSubtask(ideaId, subtaskId) {
+    const idea = ideas.value.find(i => i.id === ideaId)
+    if (!idea) return
+    const updatedSubtasks = (idea.subtasks || []).filter(st => st.id !== subtaskId)
+    await updateIdea(ideaId, { subtasks: updatedSubtasks })
+  }
+
   async function updateIdea(id, updates) {
     const authStore = useAuthStore()
     const userId = authStore.user?.uid
@@ -189,6 +219,9 @@ export const useIdeasStore = defineStore('ideas', () => {
     loadIdeas,
     addIdea,
     updateIdea,
-    deleteIdea
+    deleteIdea,
+    addSubtask,
+    toggleSubtask,
+    deleteSubtask
   }
 })
