@@ -85,6 +85,11 @@ async function handleDeleteSubtask(subtaskId) {
   await store.deleteSubtask(activeIdea.value.id, subtaskId)
 }
 
+async function handleUpdateSubtaskDate(subtaskId, field, value) {
+  if (!activeIdea.value) return
+  await store.updateSubtask(activeIdea.value.id, subtaskId, { [field]: value || null })
+}
+
 function openLinkModal(idea) {
   linkingIdea.value = idea
   showLinkModal.value = true
@@ -222,6 +227,18 @@ function formatDate(iso) {
                 />
               </div>
             </div>
+            <div class="date-range-field">
+              <span class="date-range-label">📺 Post Date</span>
+              <div class="date-range-inputs">
+                <input
+                  type="date"
+                  :value="idea.scheduledPostDate"
+                  @input="e => updateDate(idea, 'scheduledPostDate', e)"
+                  class="date-input post-date-input"
+                  title="Scheduled post date"
+                />
+              </div>
+            </div>
           </div>
 
           <div class="card-actions">
@@ -293,13 +310,35 @@ function formatDate(iso) {
               class="subtask-item"
               :class="{ completed: subtask.completed }"
             >
-              <button class="subtask-check" @click="handleToggleSubtask(subtask.id)">
-                <svg v-if="subtask.completed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              </button>
-              <span class="subtask-text">{{ subtask.text }}</span>
-              <button class="subtask-delete" @click="handleDeleteSubtask(subtask.id)" title="Remove">×</button>
+              <div class="subtask-row">
+                <button class="subtask-check" @click="handleToggleSubtask(subtask.id)">
+                  <svg v-if="subtask.completed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </button>
+                <span class="subtask-text">{{ subtask.text }}</span>
+                <button class="subtask-delete" @click="handleDeleteSubtask(subtask.id)" title="Remove">×</button>
+              </div>
+              <div class="subtask-dates">
+                <input
+                  type="date"
+                  :value="subtask.startDate"
+                  @input="e => handleUpdateSubtaskDate(subtask.id, 'startDate', e.target.value)"
+                  class="subtask-date-input"
+                  title="Start date"
+                  placeholder="Start"
+                />
+                <span class="subtask-date-sep">→</span>
+                <input
+                  type="date"
+                  :value="subtask.endDate"
+                  :min="subtask.startDate"
+                  @input="e => handleUpdateSubtaskDate(subtask.id, 'endDate', e.target.value)"
+                  class="subtask-date-input"
+                  title="End date"
+                  :disabled="!subtask.startDate"
+                />
+              </div>
             </li>
           </ul>
           <p v-else class="subtask-empty">No subtasks yet. Add one above.</p>
@@ -680,8 +719,8 @@ function formatDate(iso) {
 
 .subtask-item {
   display: flex;
-  align-items: center;
-  gap: var(--space-sm);
+  flex-direction: column;
+  gap: 4px;
   padding: var(--space-xs) var(--space-sm);
   border-radius: var(--radius-sm);
   transition: background var(--transition-fast);
@@ -689,6 +728,46 @@ function formatDate(iso) {
 
 .subtask-item:hover {
   background: var(--color-bg-card);
+}
+
+.subtask-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.subtask-dates {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 28px; /* align under text, past checkbox */
+}
+
+.subtask-date-input {
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  padding: 2px 5px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 11px;
+  flex: 1;
+  min-width: 0;
+}
+
+.subtask-date-input:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.subtask-date-sep {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
+.post-date-input {
+  max-width: 140px;
 }
 
 .subtask-check {

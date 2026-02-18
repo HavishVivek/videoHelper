@@ -64,6 +64,34 @@ const calendarGrid = computed(() => {
           })
         }
       }
+      // Post date (single day pin)
+      if (idea.scheduledPostDate && idea.scheduledPostDate === dateStr) {
+        events.push({
+          type: 'post',
+          title: idea.topic,
+          isStart: true,
+          isEnd: true,
+          ideaId: idea.id
+        })
+      }
+      // Subtask date ranges
+      if (idea.subtasks) {
+        idea.subtasks.forEach(subtask => {
+          if (subtask.startDate) {
+            const start = subtask.startDate
+            const end = subtask.endDate || start
+            if (dateStr >= start && dateStr <= end) {
+              events.push({
+                type: 'subtask',
+                title: subtask.text,
+                isStart: dateStr === start,
+                isEnd: dateStr === end,
+                ideaId: idea.id
+              })
+            }
+          }
+        })
+      }
     })
 
     days.push({ day: i, dateStr, events })
@@ -99,7 +127,7 @@ function pickIdea(idea) {
 
 function assignType(type) {
   if (!chosenIdea.value) return
-  const field = type === 'film' ? 'scheduledFilmDate' : 'scheduledScriptDate'
+  const field = type === 'film' ? 'scheduledFilmDate' : type === 'post' ? 'scheduledPostDate' : 'scheduledScriptDate'
   store.updateIdea(chosenIdea.value.id, { [field]: selectedDate.value })
   closeModal()
 }
@@ -132,6 +160,8 @@ function formatModalDate(dateStr) {
     <div class="legend">
       <span class="legend-item script">📝 Scripting</span>
       <span class="legend-item film">🎥 Filming</span>
+      <span class="legend-item post">📺 Post</span>
+      <span class="legend-item subtask">✅ Subtask</span>
     </div>
 
     <GlassCard padding="none" class="calendar-card">
@@ -160,7 +190,7 @@ function formatModalDate(dateStr) {
               class="event-pill"
               :class="[event.type, { 'range-start': event.isStart, 'range-end': event.isEnd, 'range-mid': !event.isStart && !event.isEnd }]"
             >
-              <span v-if="event.isStart" class="event-icon">{{ event.type === 'script' ? '📝' : '🎥' }}</span>
+              <span v-if="event.isStart" class="event-icon">{{ event.type === 'script' ? '📝' : event.type === 'film' ? '🎥' : event.type === 'post' ? '📺' : '✅' }}</span>
               <span class="event-title">{{ event.isStart ? event.title : '&nbsp;' }}</span>
             </div>
           </div>
@@ -211,6 +241,10 @@ function formatModalDate(dateStr) {
                 <button class="type-btn film" @click="assignType('film')">
                   <span class="type-icon">🎥</span>
                   <span>Filming</span>
+                </button>
+                <button class="type-btn post" @click="assignType('post')">
+                  <span class="type-icon">📺</span>
+                  <span>Post Date</span>
                 </button>
               </div>
               <button class="back-btn" @click="assignStep = 1">← Back</button>
@@ -265,6 +299,14 @@ function formatModalDate(dateStr) {
 
 .legend-item.film {
   color: #4caf50;
+}
+
+.legend-item.post {
+  color: #f59e0b;
+}
+
+.legend-item.subtask {
+  color: #a78bfa;
 }
 
 .calendar-card {
@@ -351,6 +393,16 @@ function formatModalDate(dateStr) {
 .event-pill.script {
   background: rgba(var(--color-accent-rgb), 0.2);
   border: 1px solid rgba(var(--color-accent-rgb), 0.4);
+}
+
+.event-pill.post {
+  background: rgba(245, 158, 11, 0.2);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.event-pill.subtask {
+  background: rgba(167, 139, 250, 0.2);
+  border: 1px solid rgba(167, 139, 250, 0.4);
 }
 
 /* Date range: middle days show as a continuous bar */
@@ -465,8 +517,8 @@ function formatModalDate(dateStr) {
 
 .type-buttons {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-md);
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-sm);
   margin-bottom: var(--space-md);
 }
 
@@ -497,6 +549,11 @@ function formatModalDate(dateStr) {
 .type-btn.film:hover {
   border-color: #4caf50;
   background: rgba(76, 175, 80, 0.1);
+}
+
+.type-btn.post:hover {
+  border-color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .back-btn {

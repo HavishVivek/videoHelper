@@ -105,7 +105,8 @@ export const useIdeasStore = defineStore('ideas', () => {
       scheduledScriptDate: null,
       scheduledScriptEndDate: null,
       scheduledFilmDate: null,
-      scheduledFilmEndDate: null
+      scheduledFilmEndDate: null,
+      scheduledPostDate: null
     }
 
     // Optimistic UI — add immediately so it doesn't disappear
@@ -143,7 +144,9 @@ export const useIdeasStore = defineStore('ideas', () => {
       id: `st_${Date.now()}`,
       text,
       completed: false,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      startDate: null,
+      endDate: null
     }
     const idea = ideas.value.find(i => i.id === ideaId)
     if (!idea) return
@@ -165,6 +168,15 @@ export const useIdeasStore = defineStore('ideas', () => {
     const idea = ideas.value.find(i => i.id === ideaId)
     if (!idea) return
     const updatedSubtasks = (idea.subtasks || []).filter(st => st.id !== subtaskId)
+    await updateIdea(ideaId, { subtasks: updatedSubtasks })
+  }
+
+  async function updateSubtask(ideaId, subtaskId, updates) {
+    const idea = ideas.value.find(i => i.id === ideaId)
+    if (!idea) return
+    const updatedSubtasks = (idea.subtasks || []).map(st =>
+      st.id === subtaskId ? { ...st, ...updates } : st
+    )
     await updateIdea(ideaId, { subtasks: updatedSubtasks })
   }
 
@@ -222,6 +234,7 @@ export const useIdeasStore = defineStore('ideas', () => {
     deleteIdea,
     addSubtask,
     toggleSubtask,
-    deleteSubtask
+    deleteSubtask,
+    updateSubtask
   }
 })
