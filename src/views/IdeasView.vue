@@ -13,6 +13,11 @@ const router = useRouter()
 const store = useIdeasStore()
 const scriptsStore = useScriptsStore()
 
+// Auto-focus directive for the inline subtask edit input
+const vFocus = {
+  mounted(el) { el.focus() }
+}
+
 const newTopic = ref('')
 const showLinkModal = ref(false)
 const linkingIdea = ref(null)
@@ -21,6 +26,8 @@ const linkingIdea = ref(null)
 const showIdeaModal = ref(false)
 const activeIdea = ref(null)
 const newSubtaskText = ref('')
+const editingSubtaskId = ref(null)
+const editingSubtaskText = ref('')
 
 onMounted(() => {
   store.loadIdeas()
@@ -48,6 +55,8 @@ function closeIdeaModal() {
   showIdeaModal.value = false
   activeIdea.value = null
   newSubtaskText.value = ''
+  editingSubtaskId.value = null
+  editingSubtaskText.value = ''
 }
 
 function goScriptIdea() {
@@ -88,6 +97,31 @@ async function handleDeleteSubtask(subtaskId) {
 async function handleUpdateSubtaskDate(subtaskId, field, value) {
   if (!activeIdea.value) return
   await store.updateSubtask(activeIdea.value.id, subtaskId, { [field]: value || null })
+}
+
+function startEditSubtask(subtask) {
+  editingSubtaskId.value = subtask.id
+  editingSubtaskText.value = subtask.text
+}
+
+async function commitEditSubtask(subtaskId) {
+  if (!activeIdea.value) return
+  const text = editingSubtaskText.value.trim()
+  if (text) {
+    await store.updateSubtask(activeIdea.value.id, subtaskId, { text })
+  }
+  editingSubtaskId.value = null
+  editingSubtaskText.value = ''
+}
+
+function cancelEditSubtask() {
+  editingSubtaskId.value = null
+  editingSubtaskText.value = ''
+}
+
+function handleUpdateNotes(value) {
+  if (!activeIdea.value) return
+  store.updateIdea(activeIdea.value.id, { notes: value })
 }
 
 function openLinkModal(idea) {
@@ -287,6 +321,20 @@ function formatDate(iso) {
 
         <div class="modal-divider"></div>
 
+        <!-- Notes section -->
+        <div class="notes-section">
+          <p class="modal-block-label">Notes</p>
+          <textarea
+            class="notes-textarea"
+            :value="activeIdea.notes || ''"
+            @input="e => handleUpdateNotes(e.target.value)"
+            placeholder="Add notes, research links, ideas..."
+            rows="4"
+          ></textarea>
+        </div>
+
+        <div class="modal-divider"></div>
+
         <!-- Subtasks section -->
         <div class="subtasks-section">
           <p class="modal-block-label">Subtasks</p>
@@ -316,7 +364,22 @@ function formatDate(iso) {
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </button>
-                <span class="subtask-text">{{ subtask.text }}</span>
+                <template v-if="editingSubtaskId === subtask.id">
+                  <input
+                    v-model="editingSubtaskText"
+                    class="subtask-edit-input"
+                    @keydown.enter.prevent="commitEditSubtask(subtask.id)"
+                    @keydown.escape="cancelEditSubtask"
+                    @blur="commitEditSubtask(subtask.id)"
+                    v-focus
+                  />
+                </template>
+                <span
+                  v-else
+                  class="subtask-text"
+                  :title="'Click to edit'"
+                  @click="startEditSubtask(subtask)"
+                >{{ subtask.text }}</span>
                 <button class="subtask-delete" @click="handleDeleteSubtask(subtask.id)" title="Remove">×</button>
               </div>
               <div class="subtask-dates">
@@ -828,5 +891,53 @@ function formatDate(iso) {
   color: var(--color-text-muted);
   text-align: center;
   padding: var(--space-md) 0;
+}
+
+/* Subtask inline edit */
+.subtask-text {
+  cursor: text;
+}
+
+.subtask-edit-input {
+  flex: 1;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-accent);
+  color: var(--color-text-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  outline: none;
+}
+
+/* Notes section */
+.notes-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.notes-textarea {
+  width: 100%;
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-primary);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: border-color var(--transition-fast);
+  box-sizing: border-box;
+}
+
+.notes-textarea:focus {
+  border-color: var(--color-accent);
+}
+
+.notes-textarea::placeholder {
+  color: var(--color-text-muted);
 }
 </style>

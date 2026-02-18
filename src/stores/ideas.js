@@ -101,6 +101,7 @@ export const useIdeasStore = defineStore('ideas', () => {
       userId,
       topic,
       status: 'idea',
+      notes: '',
       createdAt: new Date().toISOString(),
       scheduledScriptDate: null,
       scheduledScriptEndDate: null,
