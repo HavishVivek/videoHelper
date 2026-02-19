@@ -475,6 +475,7 @@ function formatDate(iso) {
 
     <PrePostChecklistModal
       v-model="showChecklistModal"
+      :ideaId="checklistIdea?.id"
       @confirm="handleIdeaPosted"
     />
 

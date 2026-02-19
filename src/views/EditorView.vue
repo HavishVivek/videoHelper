@@ -285,6 +285,7 @@ async function handlePosted() {
 
     <PrePostChecklistModal
       v-model="showChecklistModal"
+      :ideaId="scriptId"
       @confirm="handlePosted"
     />
   </PageContainer>

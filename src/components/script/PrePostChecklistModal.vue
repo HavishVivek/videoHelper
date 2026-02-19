@@ -4,7 +4,8 @@ import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 
 const props = defineProps({
-  modelValue: Boolean
+  modelValue: Boolean,
+  ideaId: { type: String, default: null }
 })
 
 const emit = defineEmits(['update:modelValue', 'confirm'])
@@ -28,12 +29,37 @@ const OPTIONAL_ITEMS = [
 
 const checked = ref(new Set())
 
+function storageKey(ideaId) {
+  return `checklist_${ideaId}`
+}
+
+function loadChecked(ideaId) {
+  if (!ideaId) return new Set()
+  try {
+    const saved = localStorage.getItem(storageKey(ideaId))
+    return saved ? new Set(JSON.parse(saved)) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function saveChecked(ideaId, set) {
+  if (!ideaId) return
+  localStorage.setItem(storageKey(ideaId), JSON.stringify([...set]))
+}
+
+function clearChecked(ideaId) {
+  if (!ideaId) return
+  localStorage.removeItem(storageKey(ideaId))
+}
+
 function toggle(id) {
   if (checked.value.has(id)) {
     checked.value.delete(id)
   } else {
     checked.value.add(id)
   }
+  saveChecked(props.ideaId, checked.value)
 }
 
 const allRequiredChecked = computed(() =>
@@ -41,18 +67,17 @@ const allRequiredChecked = computed(() =>
 )
 
 watch(() => props.modelValue, (val) => {
-  if (val) checked.value = new Set()
+  if (val) checked.value = loadChecked(props.ideaId)
 })
 
 function handleClose() {
-  checked.value = new Set()
   emit('update:modelValue', false)
 }
 
 function handleConfirm() {
   emit('confirm')
   emit('update:modelValue', false)
-  // Reset for next open
+  clearChecked(props.ideaId)
   checked.value = new Set()
 }
 </script>
