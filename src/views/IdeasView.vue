@@ -8,6 +8,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseInput from '@/components/ui/BaseInput.vue'
 import GlassCard from '@/components/ui/GlassCard.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
+import PrePostChecklistModal from '@/components/script/PrePostChecklistModal.vue'
 
 const router = useRouter()
 const store = useIdeasStore()
@@ -21,6 +22,8 @@ const vFocus = {
 const newTopic = ref('')
 const showLinkModal = ref(false)
 const linkingIdea = ref(null)
+const showChecklistModal = ref(false)
+const checklistIdea = ref(null)
 
 // Idea action modal
 const showIdeaModal = ref(false)
@@ -122,6 +125,24 @@ function cancelEditSubtask() {
 function handleUpdateNotes(value) {
   if (!activeIdea.value) return
   store.updateIdea(activeIdea.value.id, { notes: value })
+}
+
+function openChecklistModal(idea) {
+  checklistIdea.value = idea
+  showChecklistModal.value = true
+}
+
+async function handleIdeaPosted() {
+  if (!checklistIdea.value) return
+  const idea = checklistIdea.value
+  await store.updateIdea(idea.id, { status: 'posted', postedAt: new Date().toISOString() })
+  // Also mark the linked script as posted if one exists
+  const linked = getLinkedScript(idea)
+  if (linked) {
+    await scriptsStore.updateScript(linked.id, { posted: true, postedAt: new Date().toISOString() })
+  }
+  checklistIdea.value = null
+  window.__toast?.('Video marked as posted!', 'success')
 }
 
 function openLinkModal(idea) {
@@ -317,6 +338,21 @@ function formatDate(iso) {
           <button class="open-script-link" @click="goOpenScript">
             ✅ Script ready — Open in Editor →
           </button>
+          <template v-if="getLinkedScript(activeIdea)?.posted">
+            <span class="posted-badge">
+              Posted {{ getLinkedScript(activeIdea).postedAt ? new Date(getLinkedScript(activeIdea).postedAt).toLocaleDateString() : '' }}
+            </span>
+          </template>
+          <template v-else>
+            <BaseButton
+              size="sm"
+              variant="success"
+              class="posted-btn"
+              @click="openChecklistModal(activeIdea)"
+            >
+              Video is Posted
+            </BaseButton>
+          </template>
         </div>
 
         <div class="modal-divider"></div>
@@ -437,10 +473,31 @@ function formatDate(iso) {
       </template>
     </BaseModal>
 
+    <PrePostChecklistModal
+      v-model="showChecklistModal"
+      @confirm="handleIdeaPosted"
+    />
+
   </PageContainer>
 </template>
 
 <style scoped>
+.posted-btn {
+  margin-top: var(--space-sm);
+  width: 100%;
+}
+
+.posted-badge {
+  display: inline-block;
+  margin-top: var(--space-sm);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-success, #22c55e);
+  background: rgba(34, 197, 94, 0.12);
+  padding: 2px var(--space-sm);
+  border-radius: var(--radius-sm);
+}
+
 .add-section {
   margin-bottom: var(--space-xl);
 }

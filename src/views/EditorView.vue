@@ -12,6 +12,7 @@ import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import RetentionChart from '@/components/ui/RetentionChart.vue'
 import LoadingSkeleton from '@/components/ui/LoadingSkeleton.vue'
+import PrePostChecklistModal from '@/components/script/PrePostChecklistModal.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -27,6 +28,7 @@ const loadingScript = ref(true)
 const savingFeedback = ref(false)
 const lastSaved = ref(null)
 const editorMode = ref('script') // 'script' | 'packaging'
+const showChecklistModal = ref(false)
 
 // Make script reactive to store changes
 const script = computed(() => {
@@ -138,6 +140,15 @@ function goToPredictions() {
     router.push(`/predictions/${scriptId.value}`)
   }
 }
+
+async function handlePosted() {
+  if (!scriptId.value) return
+  await scriptsStore.updateScript(scriptId.value, {
+    posted: true,
+    postedAt: new Date().toISOString()
+  })
+  window.__toast?.('Marked as posted!', 'success')
+}
 </script>
 
 <template>
@@ -179,6 +190,9 @@ function goToPredictions() {
             <BaseBadge v-if="savingFeedback" variant="info" size="sm">
               Analyzing...
             </BaseBadge>
+            <BaseBadge v-if="script.posted" variant="success" size="sm">
+              Posted {{ script.postedAt ? new Date(script.postedAt).toLocaleDateString() : '' }}
+            </BaseBadge>
           </div>
         </div>
         <div class="editor-actions">
@@ -194,6 +208,14 @@ function goToPredictions() {
             </BaseButton>
           <BaseButton variant="secondary" size="sm" @click="handleSave">Save</BaseButton>
           <BaseButton size="sm" @click="goToPredictions">View Predictions</BaseButton>
+          <BaseButton
+            v-if="!script.posted"
+            size="sm"
+            variant="success"
+            @click="showChecklistModal = true"
+          >
+            Mark as Posted
+          </BaseButton>
         </div>
       </div>
 
@@ -260,6 +282,11 @@ function goToPredictions() {
         <BaseButton @click="router.push('/generate')">Generate New Script</BaseButton>
       </GlassCard>
     </div>
+
+    <PrePostChecklistModal
+      v-model="showChecklistModal"
+      @confirm="handlePosted"
+    />
   </PageContainer>
 </template>
 

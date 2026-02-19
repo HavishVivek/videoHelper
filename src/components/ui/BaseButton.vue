@@ -88,6 +88,14 @@ defineEmits(['click'])
   background: #e53935;
 }
 
+.btn-success {
+  background: #16a34a;
+  color: white;
+}
+.btn-success:hover:not(:disabled) {
+  background: #15803d;
+}
+
 .btn-block { width: 100%; }
 
 .btn-loading { position: relative; }
