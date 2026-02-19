@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 
@@ -40,7 +40,12 @@ const allRequiredChecked = computed(() =>
   REQUIRED_ITEMS.every(item => checked.value.has(item.id))
 )
 
+watch(() => props.modelValue, (val) => {
+  if (val) checked.value = new Set()
+})
+
 function handleClose() {
+  checked.value = new Set()
   emit('update:modelValue', false)
 }
 
