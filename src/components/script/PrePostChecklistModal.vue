@@ -15,16 +15,15 @@ const REQUIRED_ITEMS = [
   { id: 'filmed', label: 'Video filmed and edited' },
   { id: 'thumbnail', label: 'Thumbnail ready' },
   { id: 'title', label: 'Title chosen' },
-  { id: 'description', label: 'Description written' },
-  { id: 'tags', label: 'Tags added' },
+  { id: 'description', label: 'Link for the video - description' },
+  { id: 'social', label: 'Posted Instagram, Twitter, Threads post' },
+  { id: 'endscreen', label: 'End screen configured' },
+  { id: 'subscribe', label: 'Subscribe animation' },
 ]
 
 const OPTIONAL_ITEMS = [
-  { id: 'endscreen', label: 'End screen configured' },
-  { id: 'cards', label: 'Cards / annotations added' },
-  { id: 'captions', label: 'Subtitles / captions uploaded' },
-  { id: 'pinned', label: 'Pinned comment ready' },
-  { id: 'social', label: 'Shared on social media' },
+  { id: 'link_animation', label: 'Link in description animation' },
+  { id: 'shorts', label: 'Convert video into shorts' },
 ]
 
 const checked = ref(new Set())
