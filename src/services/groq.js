@@ -92,7 +92,27 @@ Respond in valid JSON format as an array of objects with keys: conceptName, desc
 1. Generate 5 viral-style titles (mix of curiosity, benefit-driven, and urgency).
 2. Write a compelling, keyword-rich video description (first 2 lines are crucial).
 3. Generate 15-20 relevant tags/keywords used by top creators in this niche.
-Respond in valid JSON with keys: titles (array of strings), description (string), tags (array of strings), category (string).`
+Respond in valid JSON with keys: titles (array of strings), description (string), tags (array of strings), category (string).`,
+
+  thumbnailTitles: `You are a YouTube thumbnail text expert. Create 3 distinct, punchy text overlays for video thumbnails based on the provided topic and script.
+
+Each text should:
+- Be 3-5 words maximum (short and impactful)
+- Create curiosity or urgency
+- Be readable at small sizes
+- Complement the video title (not repeat it)
+- Use power words and emotional triggers
+
+Respond in valid JSON format as an array of 3 strings (the text overlays for each thumbnail).
+
+Examples of good thumbnail text:
+- "THIS CHANGED EVERYTHING"
+- "You're Doing It WRONG"
+- "The SECRET Method"
+- "Watch Before DELETED"
+- "2024 METHOD"
+
+Keep it BOLD, SHORT, and CLICKABLE.`
 }
 
 export async function analyzeChannel(channelData, topVideos) {
@@ -367,5 +387,46 @@ Generate optimized metadata (titles, description, tags).`
   } catch (e) {
     console.error('Metadata generation error', e)
     return null
+  }
+}
+
+export async function generateThumbnailTitles(scriptContent, topic) {
+  const groq = getClient()
+  const response = await groq.chat.completions.create({
+    model: getModelName(),
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPTS.thumbnailTitles },
+      {
+        role: 'user',
+        content: `Topic: ${topic}
+Script:
+${scriptContent.substring(0, 2000)}... (truncated)
+
+Generate 3 punchy thumbnail text overlays (3-5 words each).`
+      }
+    ],
+    temperature: 0.9,
+    max_tokens: 500,
+    response_format: { type: 'json_object' }
+  })
+  try {
+    const parsed = JSON.parse(response.choices[0].message.content)
+    // The LLM may wrap the array in any key — find the first array in the response
+    if (Array.isArray(parsed)) return parsed
+    const arrayValue = Object.values(parsed).find(v => Array.isArray(v))
+    if (arrayValue && arrayValue.length === 3) return arrayValue
+    // Fallback: generate default titles
+    return [
+      `${topic.substring(0, 20).toUpperCase()}`,
+      'WATCH THIS NOW',
+      'YOU NEED TO SEE THIS'
+    ]
+  } catch (e) {
+    console.error('Thumbnail titles generation error', e)
+    return [
+      `${topic.substring(0, 20).toUpperCase()}`,
+      'WATCH THIS NOW',
+      'YOU NEED TO SEE THIS'
+    ]
   }
 }

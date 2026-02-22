@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { db, firebaseConfigured } from '@/services/firebase'
 import { collection, query, where, getDocs, doc, getDoc, setDoc, deleteDoc } from 'firebase/firestore'
-import { generateIntroVariations, generateFullScript, getEditingFeedback, predictPerformance, streamFullScript, generateScriptVariations as generateScriptVariationsAPI, generateThumbnailConcepts, generateMetadata } from '@/services/groq'
+import { generateIntroVariations, generateFullScript, getEditingFeedback, predictPerformance, streamFullScript, generateScriptVariations as generateScriptVariationsAPI, generateThumbnailConcepts, generateMetadata, generateThumbnailTitles } from '@/services/groq'
 import { useAuthStore } from './auth'
 import { useChannelStore } from './channel'
 
@@ -496,6 +496,33 @@ export const useScriptsStore = defineStore('scripts', () => {
     }
   }
 
+  async function fetchThumbnailTitles(scriptIdParam = null) {
+    // Use provided script ID or fall back to currentScript
+    const scriptId = scriptIdParam || currentScript.value?.id
+    if (!scriptId) return null
+
+    // Load the script data if we don't have it
+    let scriptData = scripts.value.find(s => s.id === scriptId)
+    if (!scriptData) {
+      scriptData = await fsGet('scripts', scriptId)
+      if (!scriptData) return null
+      // Add to scripts array if not present
+      scripts.value.push(scriptData)
+    }
+
+    generating.value = true
+    try {
+      const titles = await generateThumbnailTitles(scriptData.content, scriptData.topic)
+      return titles
+    } catch (e) {
+      console.error('Thumbnail titles error:', e)
+      error.value = e.message
+      return null
+    } finally {
+      generating.value = false
+    }
+  }
+
   async function linkScriptToIdea(scriptId, ideaId) {
     try {
       await fsSet('scripts', scriptId, { ideaId, updatedAt: new Date().toISOString() })
@@ -552,6 +579,7 @@ export const useScriptsStore = defineStore('scripts', () => {
     fetchEditingFeedback,
     fetchPrediction,
     fetchThumbnails,
+    fetchThumbnailTitles,
     fetchMetadata
   }
 })

@@ -15,14 +15,23 @@ const props = defineProps({
 
 const store = useScriptsStore()
 const loading = ref(false)
-const loadingThumb = ref(false)
-const thumbnailError = ref('')
-const generatingTitle = ref(false)
-const generatedTitle = ref('')
+const loadingThumb = ref([false, false, false])
+const thumbnailError = ref(['', '', ''])
+const generatingTitles = ref(false)
+
+// Initialize thumbnails array if it doesn't exist
+const thumbnails = computed(() => {
+  const thumbs = props.script.thumbnails || []
+  // Ensure we always have 3 slots
+  while (thumbs.length < 3) {
+    thumbs.push({ url: null, title: null })
+  }
+  return thumbs.slice(0, 3) // Max 3 thumbnails
+})
 
 const hasPackaging = computed(() => {
-  return (props.script.thumbnailUrl) || 
-         (props.script.metadata && props.script.metadata.titles)
+  const hasThumbnails = props.script.thumbnails?.some(t => t.url)
+  return hasThumbnails || (props.script.metadata && props.script.metadata.titles)
 })
 
 async function generateAll() {
@@ -31,54 +40,68 @@ async function generateAll() {
   loading.value = false
 }
 
-async function handleFileUpload(event) {
+async function handleFileUpload(event, index) {
   const file = event.target.files[0]
   if (!file) return
-  
+
   // Validation: Max 1MB
   if (file.size > 1024 * 1024) {
-    thumbnailError.value = 'File too large (Max 1MB)'
+    thumbnailError.value[index] = 'File too large (Max 1MB)'
     return
   }
-  
-  loadingThumb.value = true
-  thumbnailError.value = ''
-  
+
+  loadingThumb.value[index] = true
+  thumbnailError.value[index] = ''
+
   try {
     const reader = new FileReader()
     reader.onload = async (e) => {
       const base64 = e.target.result
-      await store.updateScript(props.script.id, { thumbnailUrl: base64 })
+      const updatedThumbnails = [...thumbnails.value]
+      updatedThumbnails[index] = { ...updatedThumbnails[index], url: base64 }
+
+      await store.updateScript(props.script.id, { thumbnails: updatedThumbnails })
       window.__toast?.('Thumbnail uploaded', 'success')
-      loadingThumb.value = false
+      loadingThumb.value[index] = false
     }
     reader.onerror = () => {
-      thumbnailError.value = 'Failed to read file'
-      loadingThumb.value = false
+      thumbnailError.value[index] = 'Failed to read file'
+      loadingThumb.value[index] = false
     }
     reader.readAsDataURL(file)
   } catch (e) {
-    thumbnailError.value = 'Upload failed'
-    loadingThumb.value = false
+    thumbnailError.value[index] = 'Upload failed'
+    loadingThumb.value[index] = false
   }
 }
 
-async function generateTitleForThumbnail() {
-  generatingTitle.value = true
-  
-  // Simulate AI analysis delay
-  setTimeout(() => {
-    // Generate a contextual title based on topic
-    const templates = [
-      `The Truth About ${props.script.topic}`,
-      `Why ${props.script.topic} Changes Everything`,
-      `Stop doing ${props.script.topic} wrong!`,
-      `${props.script.topic} Explained in 5 Minutes`,
-      `The Ultimate Guide to ${props.script.topic}`
-    ]
-    generatedTitle.value = templates[Math.floor(Math.random() * templates.length)]
-    generatingTitle.value = false
-  }, 1500)
+async function removeThumbnail(index) {
+  const updatedThumbnails = [...thumbnails.value]
+  updatedThumbnails[index] = { url: null, title: null }
+  await store.updateScript(props.script.id, { thumbnails: updatedThumbnails })
+  window.__toast?.('Thumbnail removed', 'success')
+}
+
+async function generateTitlesForThumbnails() {
+  generatingTitles.value = true
+
+  try {
+    const titles = await store.fetchThumbnailTitles(props.script.id)
+
+    if (titles && titles.length === 3) {
+      const updatedThumbnails = thumbnails.value.map((thumb, i) => ({
+        ...thumb,
+        title: titles[i]
+      }))
+      await store.updateScript(props.script.id, { thumbnails: updatedThumbnails })
+      window.__toast?.('Titles generated successfully', 'success')
+    }
+  } catch (e) {
+    window.__toast?.('Failed to generate titles', 'error')
+    console.error('Title generation error:', e)
+  } finally {
+    generatingTitles.value = false
+  }
 }
 
 function copyToClipboard(text) {
@@ -145,45 +168,82 @@ function copyToClipboard(text) {
 
       <!-- Thumbnails -->
       <section class="packaging-section">
-        <h3 class="section-title">Thumbnail Image</h3>
-        <GlassCard padding="lg" :hover="false">
-          <div class="thumbnail-updater">
-            <div class="input-group file-input-group">
-              <label class="file-upload-btn">
-                <input type="file" accept="image/*" @change="handleFileUpload" class="hidden-input" />
-                <span v-if="loadingThumb">Uploading...</span>
-                <span v-else>Start Upload from Computer</span>
-              </label>
-              <div v-if="thumbnailError" class="error-text">{{ thumbnailError }}</div>
-            </div>
-            
-            <div v-if="script.thumbnailUrl" class="thumb-preview-container">
-              <div class="preview-header">
-                <h4>Current Thumbnail</h4>
-                <BaseButton 
-                  size="sm" 
-                  variant="accent" 
-                  @click="generateTitleForThumbnail"
-                  :loading="generatingTitle"
+        <div class="section-header">
+          <h3 class="section-title">Thumbnail Images (Max 3)</h3>
+          <BaseButton
+            v-if="thumbnails.some(t => t.url)"
+            size="sm"
+            variant="accent"
+            @click="generateTitlesForThumbnails"
+            :loading="generatingTitles"
+          >
+            Generate Titles for All
+          </BaseButton>
+        </div>
+
+        <div class="thumbnails-grid">
+          <GlassCard
+            v-for="(thumbnail, index) in thumbnails"
+            :key="index"
+            padding="md"
+            :hover="false"
+            class="thumbnail-card"
+          >
+            <div class="thumbnail-slot">
+              <div class="slot-header">
+                <span class="slot-number">Thumbnail {{ index + 1 }}</span>
+                <button
+                  v-if="thumbnail.url"
+                  class="remove-btn"
+                  @click="removeThumbnail(index)"
+                  title="Remove thumbnail"
                 >
-                  Generate Title for this
-                </BaseButton>
+                  ✕
+                </button>
               </div>
-              <img :src="script.thumbnailUrl" alt="Thumbnail Preview" class="thumb-preview-img" />
-              
-              <div v-if="generatedTitle" class="generated-title-box">
-                <label>Suggested Title:</label>
-                <div class="title-content">
-                  {{ generatedTitle }}
-                  <button class="copy-btn" @click="copyToClipboard(generatedTitle)">Copy</button>
+
+              <div v-if="!thumbnail.url" class="upload-area">
+                <label class="file-upload-btn">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    @change="(e) => handleFileUpload(e, index)"
+                    class="hidden-input"
+                  />
+                  <span v-if="loadingThumb[index]">Uploading...</span>
+                  <span v-else>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    Upload Image
+                  </span>
+                </label>
+                <div v-if="thumbnailError[index]" class="error-text">
+                  {{ thumbnailError[index] }}
+                </div>
+              </div>
+
+              <div v-else class="thumbnail-preview">
+                <img :src="thumbnail.url" alt="Thumbnail Preview" class="preview-img" />
+
+                <div v-if="thumbnail.title" class="thumbnail-title-box">
+                  <label>AI-Generated Title:</label>
+                  <div class="title-content">
+                    <span>{{ thumbnail.title }}</span>
+                    <button class="copy-btn" @click="copyToClipboard(thumbnail.title)">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-            <div v-else class="empty-thumb-placeholder">
-              <p>No thumbnail attached. Upload an image to add one.</p>
-            </div>
-          </div>
-        </GlassCard>
+          </GlassCard>
+        </div>
       </section>
       
       <div class="actions-footer">
@@ -226,10 +286,17 @@ function copyToClipboard(text) {
   gap: var(--space-xl);
 }
 
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-md);
+}
+
 .section-title {
   font-size: var(--font-size-lg);
   font-weight: 600;
-  margin-bottom: var(--space-md);
+  margin-bottom: 0;
   color: var(--color-text-primary);
 }
 
@@ -325,16 +392,70 @@ function copyToClipboard(text) {
   margin-left: var(--space-xs);
 }
 
-/* Thumbnail Manual Input */
-.file-input-group {
+/* Thumbnails Grid */
+.thumbnails-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-md);
+}
+
+.thumbnail-card {
+  min-height: 350px;
+}
+
+.thumbnail-slot {
+  display: flex;
   flex-direction: column;
-  align-items: stretch;
+  gap: var(--space-sm);
+}
+
+.slot-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-xs);
+}
+
+.slot-number {
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  letter-spacing: 0.05em;
+}
+
+.remove-btn {
+  background: rgba(255, 59, 48, 0.1);
+  border: none;
+  color: #ff3b30;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-btn:hover {
+  background: rgba(255, 59, 48, 0.2);
+}
+
+.upload-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .file-upload-btn {
   display: flex;
+  flex-direction: column;
   justify-content: center;
   align-items: center;
+  gap: var(--space-sm);
   padding: var(--space-xl);
   border: 2px dashed var(--color-border);
   border-radius: var(--radius-md);
@@ -343,12 +464,17 @@ function copyToClipboard(text) {
   transition: all 0.2s;
   color: var(--color-text-secondary);
   font-weight: 500;
+  min-height: 200px;
 }
 
 .file-upload-btn:hover {
   border-color: var(--color-accent);
   color: var(--color-accent);
   background: rgba(var(--color-accent-rgb), 0.05);
+}
+
+.file-upload-btn svg {
+  opacity: 0.5;
 }
 
 .hidden-input {
@@ -362,28 +488,14 @@ function copyToClipboard(text) {
   text-align: center;
 }
 
-.thumb-preview-container {
-  margin-top: var(--space-lg);
-}
-
-.preview-header {
+.thumbnail-preview {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: var(--space-sm);
+  flex-direction: column;
+  gap: var(--space-sm);
 }
 
-.thumb-preview-container h4 {
-  margin-bottom: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-sm);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.thumb-preview-img {
+.preview-img {
   width: 100%;
-  max-width: 480px;
   aspect-ratio: 16/9;
   object-fit: cover;
   border-radius: var(--radius-md);
@@ -391,9 +503,8 @@ function copyToClipboard(text) {
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
-.generated-title-box {
-  margin-top: var(--space-md);
-  padding: var(--space-md);
+.thumbnail-title-box {
+  padding: var(--space-sm);
   background: var(--color-bg-input);
   border-radius: var(--radius-sm);
   border-left: 3px solid var(--color-accent);
@@ -405,29 +516,27 @@ function copyToClipboard(text) {
   to { opacity: 1; transform: translateY(0); }
 }
 
-.generated-title-box label {
+.thumbnail-title-box label {
   display: block;
   font-size: var(--font-size-xs);
   text-transform: uppercase;
   color: var(--color-text-muted);
   margin-bottom: 4px;
+  letter-spacing: 0.05em;
 }
 
 .title-content {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-weight: 600;
+  gap: var(--space-xs);
+  font-weight: 500;
   color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
 }
 
-.empty-thumb-placeholder {
-  padding: var(--space-xl);
-  text-align: center;
-  border: 2px dashed var(--color-border);
-  border-radius: var(--radius-md);
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
+.title-content span {
+  flex: 1;
 }
 
 .actions-footer {
