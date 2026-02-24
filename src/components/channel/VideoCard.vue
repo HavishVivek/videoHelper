@@ -9,15 +9,21 @@ const props = defineProps({
   rank: Number
 })
 
+const emit = defineEmits(['select'])
+
 const engagement = computed(() => engagementRate(props.video.likeCount, props.video.viewCount))
 const durationFormatted = computed(() => {
   if (!props.video.duration) return ''
   return formatDuration(parseDuration(props.video.duration))
 })
+
+function handleClick() {
+  emit('select', props.video)
+}
 </script>
 
 <template>
-  <div class="video-card glass">
+  <div class="video-card glass" @click="handleClick">
     <div class="thumbnail-wrapper">
       <img :src="video.thumbnail" :alt="video.title" class="thumbnail" />
       <span class="duration" v-if="durationFormatted">{{ durationFormatted }}</span>
@@ -45,6 +51,7 @@ const durationFormatted = computed(() => {
   overflow: hidden;
   border-radius: var(--radius-md);
   transition: all var(--transition-base);
+  cursor: pointer;
 }
 
 .video-card:hover {

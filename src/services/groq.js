@@ -112,7 +112,22 @@ Examples of good thumbnail text:
 - "Watch Before DELETED"
 - "2024 METHOD"
 
-Keep it BOLD, SHORT, and CLICKABLE.`
+Keep it BOLD, SHORT, and CLICKABLE.`,
+
+  videoIdeas: `You are a YouTube content strategist. Based on the provided video's performance and content, generate 5 related video ideas that could perform well on this channel.
+
+Each idea should:
+- Be related to the original video's topic but offer a new angle or perspective
+- Have high viral/engagement potential
+- Match the channel's content style
+- Include a compelling hook suggestion
+
+Respond in valid JSON format as an array of objects with keys:
+- title: The proposed video title (attention-grabbing)
+- description: Brief description of what the video would cover (2-3 sentences)
+- hookSuggestion: A suggested opening hook for this video
+- reasoning: Why this idea would perform well (based on the original video's metrics)
+- estimatedPerformance: Predicted performance relative to the original video (percentage, e.g., "120%" means 20% better)`
 }
 
 export async function analyzeChannel(channelData, topVideos) {
@@ -428,5 +443,40 @@ Generate 3 punchy thumbnail text overlays (3-5 words each).`
       'WATCH THIS NOW',
       'YOU NEED TO SEE THIS'
     ]
+  }
+}
+
+export async function generateVideoIdeas(video, channelAnalysis = '') {
+  const groq = getClient()
+  const response = await groq.chat.completions.create({
+    model: getModelName(),
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPTS.videoIdeas },
+      {
+        role: 'user',
+        content: `Original Video:
+Title: ${video.title}
+Views: ${video.viewCount}
+Likes: ${video.likeCount}
+Comments: ${video.commentCount}
+${channelAnalysis ? `\nChannel Analysis:\n${channelAnalysis}` : ''}
+
+Generate 5 related video ideas that could perform well based on this video's success.`
+      }
+    ],
+    temperature: 0.8,
+    max_tokens: 2000,
+    response_format: { type: 'json_object' }
+  })
+  try {
+    const parsed = JSON.parse(response.choices[0].message.content)
+    // The LLM may wrap the array in any key — find the first array in the response
+    if (Array.isArray(parsed)) return parsed
+    const arrayValue = Object.values(parsed).find(v => Array.isArray(v))
+    if (arrayValue) return arrayValue
+    return []
+  } catch (e) {
+    console.error('Video ideas generation error', e)
+    return []
   }
 }

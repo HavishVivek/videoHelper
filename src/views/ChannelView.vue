@@ -1,6 +1,8 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useChannel } from '@/composables/useChannel'
+import { generateVideoIdeas } from '@/services/groq'
 import PageContainer from '@/components/layout/PageContainer.vue'
 import ChannelCard from '@/components/channel/ChannelCard.vue'
 import VideoCard from '@/components/channel/VideoCard.vue'
@@ -9,13 +11,28 @@ import GlassCard from '@/components/ui/GlassCard.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseBadge from '@/components/ui/BaseBadge.vue'
 import LoadingSkeleton from '@/components/ui/LoadingSkeleton.vue'
+import BaseModal from '@/components/ui/BaseModal.vue'
 
+const router = useRouter()
 const { channel, videos, topVideos, analysis, loading, error, importChannel, analyze, sortBy } = useChannel()
 
 const channelHandle = ref('')
 const sortKey = ref('viewCount')
 const filterText = ref('')
 const showAnalysis = ref(false)
+const selectedVideo = ref(null)
+const showVideoModal = ref(false)
+const videoIdeas = ref([])
+const generatingIdeas = ref(false)
+const ideasError = ref('')
+
+// Reset state when modal is closed
+watch(showVideoModal, (newVal) => {
+  if (!newVal) {
+    videoIdeas.value = []
+    ideasError.value = ''
+  }
+})
 
 const filteredVideos = computed(() => {
   if (!filterText.value) return videos.value
@@ -39,6 +56,48 @@ async function handleImport() {
 async function handleAnalyze() {
   await analyze()
   showAnalysis.value = true
+}
+
+function handleVideoSelect(video) {
+  selectedVideo.value = video
+  showVideoModal.value = true
+}
+
+function watchVideo() {
+  if (selectedVideo.value) {
+    window.open(`https://www.youtube.com/watch?v=${selectedVideo.value.id}`, '_blank')
+    showVideoModal.value = false
+  }
+}
+
+async function generateIdeas() {
+  if (!selectedVideo.value) return
+
+  generatingIdeas.value = true
+  ideasError.value = ''
+  videoIdeas.value = []
+
+  try {
+    const ideas = await generateVideoIdeas(selectedVideo.value, analysis.value)
+    videoIdeas.value = ideas
+  } catch (err) {
+    console.error('Failed to generate video ideas:', err)
+    ideasError.value = 'Failed to generate video ideas. Please try again.'
+  } finally {
+    generatingIdeas.value = false
+  }
+}
+
+function useIdeaForScript(idea) {
+  router.push({
+    name: 'ScriptGenerator',
+    query: { topic: idea.title }
+  })
+  showVideoModal.value = false
+}
+
+function closeModal() {
+  showVideoModal.value = false
 }
 </script>
 
@@ -147,10 +206,76 @@ async function handleAnalyze() {
             :key="video.id"
             :video="video"
             :rank="sortKey === 'viewCount' && !filterText ? i + 1 : undefined"
+            @select="handleVideoSelect"
           />
         </div>
       </div>
     </template>
+
+    <!-- Video Action Modal -->
+    <BaseModal v-model="showVideoModal" :title="videoIdeas.length ? 'Video Ideas' : 'What would you like to do?'" max-width="700px">
+      <div class="modal-video-info">
+        <div class="modal-thumbnail">
+          <img :src="selectedVideo?.thumbnail" :alt="selectedVideo?.title" />
+        </div>
+        <h4 class="modal-video-title">{{ selectedVideo?.title }}</h4>
+      </div>
+
+      <!-- Initial Actions -->
+      <div v-if="!videoIdeas.length && !generatingIdeas" class="modal-actions">
+        <BaseButton size="lg" variant="secondary" @click="watchVideo" block>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+            <polygon points="5 3 19 12 5 21 5 3" />
+          </svg>
+          Watch Video
+        </BaseButton>
+        <BaseButton size="lg" @click="generateIdeas" block :loading="generatingIdeas">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 8px;">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+          </svg>
+          Generate Video Ideas
+        </BaseButton>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="generatingIdeas" class="ideas-loading">
+        <LoadingSkeleton width="100%" height="100px" />
+        <LoadingSkeleton width="100%" height="100px" />
+        <LoadingSkeleton width="100%" height="100px" />
+        <p class="loading-text">Generating video ideas...</p>
+      </div>
+
+      <!-- Error State -->
+      <div v-if="ideasError" class="ideas-error">
+        <p class="error-text">{{ ideasError }}</p>
+        <BaseButton size="sm" @click="generateIdeas">Try Again</BaseButton>
+      </div>
+
+      <!-- Generated Ideas -->
+      <div v-if="videoIdeas.length" class="ideas-list">
+        <div v-for="(idea, index) in videoIdeas" :key="index" class="idea-card">
+          <div class="idea-header">
+            <h5 class="idea-title">{{ idea.title }}</h5>
+            <BaseBadge variant="accent" size="sm">{{ idea.estimatedPerformance || '100%' }}</BaseBadge>
+          </div>
+          <p class="idea-description">{{ idea.description }}</p>
+          <div class="idea-hook">
+            <strong>Hook:</strong> {{ idea.hookSuggestion }}
+          </div>
+          <p class="idea-reasoning">{{ idea.reasoning }}</p>
+          <BaseButton size="sm" @click="useIdeaForScript(idea)" block>
+            Use for Script
+          </BaseButton>
+        </div>
+        <div class="ideas-actions">
+          <BaseButton variant="ghost" @click="closeModal">Close</BaseButton>
+          <BaseButton variant="secondary" @click="generateIdeas" :loading="generatingIdeas">
+            Generate More Ideas
+          </BaseButton>
+        </div>
+      </div>
+    </BaseModal>
   </PageContainer>
 </template>
 
@@ -328,5 +453,143 @@ async function handleAnalyze() {
   .skeleton-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.modal-video-info {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  margin-bottom: var(--space-lg);
+}
+
+.modal-thumbnail {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.modal-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.modal-video-title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-text-primary);
+  margin: 0;
+}
+
+.modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.ideas-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md) 0;
+}
+
+.loading-text {
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-sm);
+}
+
+.ideas-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  text-align: center;
+}
+
+.ideas-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  max-height: 500px;
+  overflow-y: auto;
+  padding-right: var(--space-xs);
+}
+
+.idea-card {
+  background: var(--color-bg-secondary);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  transition: all var(--transition-base);
+}
+
+.idea-card:hover {
+  border-color: var(--color-border-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+.idea-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-sm);
+}
+
+.idea-title {
+  font-size: var(--font-size-md);
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-text-primary);
+  margin: 0;
+  flex: 1;
+}
+
+.idea-description {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.idea-hook {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-tertiary);
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--color-accent);
+}
+
+.idea-hook strong {
+  color: var(--color-accent);
+  margin-right: var(--space-xs);
+}
+
+.idea-reasoning {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
+  margin: 0;
+}
+
+.ideas-actions {
+  display: flex;
+  gap: var(--space-md);
+  justify-content: flex-end;
+  padding-top: var(--space-md);
+  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-md);
+  position: sticky;
+  bottom: 0;
+  background: var(--color-bg-primary);
 }
 </style>
