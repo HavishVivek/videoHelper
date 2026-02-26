@@ -50,29 +50,37 @@ async function handleImport() {
             v-model="topic"
             label="Video Topic"
             placeholder="What is your video about?"
+            required
           />
         </div>
 
         <div class="form-group">
-          <label class="label">Script Content</label>
+          <label class="label">Script Content *</label>
           <textarea
             v-model="content"
             class="script-input"
             placeholder="Paste your script here..."
             rows="15"
           ></textarea>
+          <p v-if="content.trim()" class="char-count">{{ content.trim().length }} characters</p>
         </div>
 
         <div class="actions">
           <BaseButton variant="secondary" @click="router.back()">Cancel</BaseButton>
-          <BaseButton 
-            @click="handleImport" 
+          <BaseButton
+            @click="handleImport"
             :loading="importing"
             :disabled="!topic.trim() || !content.trim()"
           >
             Import & Analyze
           </BaseButton>
         </div>
+
+        <p v-if="!topic.trim() || !content.trim()" class="hint-text">
+          {{ !topic.trim() && !content.trim() ? 'Please fill in both the video topic and script content' :
+             !topic.trim() ? 'Please enter a video topic to continue' :
+             'Please paste your script content to continue' }}
+        </p>
       </GlassCard>
     </div>
   </PageContainer>
@@ -120,5 +128,18 @@ async function handleImport() {
   justify-content: flex-end;
   gap: var(--space-md);
   margin-top: var(--space-xl);
+}
+
+.char-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-top: var(--space-xs);
+}
+
+.hint-text {
+  font-size: var(--font-size-sm);
+  color: var(--color-warning);
+  text-align: center;
+  margin-top: var(--space-md);
 }
 </style>
