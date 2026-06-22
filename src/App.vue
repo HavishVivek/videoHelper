@@ -20,9 +20,11 @@ function toggleSidebar() {
     <Sidebar v-if="authStore.isAuthenticated" :open="sidebarOpen" />
 
     <main class="main-content">
-      <router-view v-slot="{ Component }">
+      <router-view v-slot="{ Component, route }">
         <transition name="page" mode="out-in">
-          <component :is="Component" />
+          <div class="route-shell" :key="route.fullPath">
+            <component :is="Component" />
+          </div>
         </transition>
       </router-view>
     </main>
@@ -59,5 +61,16 @@ function toggleSidebar() {
   .sidebar-open .main-content {
     margin-left: 0;
   }
+}
+
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(8px);
 }
 </style>

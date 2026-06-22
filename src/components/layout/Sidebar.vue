@@ -13,6 +13,8 @@ const scriptsStore = useScriptsStore()
 const navItems = [
   { path: '/', label: 'Dashboard', icon: 'grid' },
   { path: '/ideas', label: 'Ideas Board', icon: 'bulb' },
+  { path: '/folders', label: 'Folders', icon: 'folder' },
+  { path: '/tasks', label: 'Tasks', icon: 'tasks' },
   { path: '/calendar', label: 'Calendar', icon: 'calendar' },
   { path: '/channel', label: 'Channel', icon: 'tv' },
   { path: '/generate', label: 'Generate Script', icon: 'pen' },
@@ -24,31 +26,46 @@ const recentScripts = computed(() => scriptsStore.sortedScripts.slice(0, 5))
 <template>
   <aside class="sidebar" :class="{ open }">
     <nav class="sidebar-nav">
-      <router-link
-        v-for="item in navItems"
-        :key="item.path"
-        :to="item.path"
-        class="nav-item"
-        :class="{ active: route.path === item.path }"
-      >
-        <svg v-if="item.icon === 'grid'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-          <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+      <router-link v-for="item in navItems" :key="item.path" :to="item.path" class="nav-item"
+        :class="{ active: route.path === item.path }">
+        <svg v-if="item.icon === 'grid'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" />
+          <rect x="14" y="3" width="7" height="7" />
+          <rect x="3" y="14" width="7" height="7" />
+          <rect x="14" y="14" width="7" height="7" />
         </svg>
-        <svg v-else-if="item.icon === 'bulb'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z" />
+        <svg v-else-if="item.icon === 'bulb'" width="20" height="20" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2">
+          <path
+            d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z" />
           <path d="M9 21h6" />
         </svg>
-        <svg v-else-if="item.icon === 'calendar'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg v-else-if="item.icon === 'calendar'" width="20" height="20" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2">
           <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-          <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
+          <line x1="16" y1="2" x2="16" y2="6" />
+          <line x1="8" y1="2" x2="8" y2="6" />
           <line x1="3" y1="10" x2="21" y2="10" />
         </svg>
-        <svg v-else-if="item.icon === 'tv'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="2" y="7" width="20" height="15" rx="2" /><polyline points="17 2 12 7 7 2" />
+        <svg v-else-if="item.icon === 'tasks'" width="20" height="20" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2">
+          <polyline points="9 11 12 14 22 4" />
+          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
         </svg>
-        <svg v-else-if="item.icon === 'pen'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+        <svg v-else-if="item.icon === 'tv'" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2">
+          <rect x="2" y="7" width="20" height="15" rx="2" />
+          <polyline points="17 2 12 7 7 2" />
+        </svg>
+        <svg v-else-if="item.icon === 'folder'" width="20" height="20" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+        </svg>
+        <svg v-else-if="item.icon === 'pen'" width="20" height="20" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2">
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
         </svg>
         <span>{{ item.label }}</span>
       </router-link>
@@ -56,21 +73,29 @@ const recentScripts = computed(() => scriptsStore.sortedScripts.slice(0, 5))
 
     <div class="sidebar-section" v-if="recentScripts.length">
       <h4 class="section-title">Recent Scripts</h4>
-      <router-link
-        v-for="script in recentScripts"
-        :key="script.id"
-        :to="`/editor/${script.id}`"
-        class="script-link"
-        :class="{ active: route.params.id === script.id }"
-      >
+      <router-link v-for="script in recentScripts" :key="script.id" :to="`/editor/${script.id}`" class="script-link"
+        :class="{ active: route.params.id === script.id }">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
           <polyline points="14 2 14 8 20 8" />
-          <line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
         </svg>
         <span class="truncate">{{ script.topic || 'Untitled' }}</span>
       </router-link>
     </div>
+
+    <!-- ── Settings (pinned to bottom) ───────────────────────────────── -->
+    <nav class="sidebar-footer">
+      <router-link to="/settings" class="nav-item" :class="{ active: route.path === '/settings' }">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+        <span>Settings</span>
+      </router-link>
+    </nav>
   </aside>
 </template>
 
@@ -157,6 +182,13 @@ const recentScripts = computed(() => scriptsStore.sortedScripts.slice(0, 5))
 
 .script-link.active {
   color: var(--color-accent);
+}
+
+/* ── Settings footer ─────────────────────────────────────────────────── */
+.sidebar-footer {
+  margin-top: auto;
+  padding: var(--space-md) var(--space-sm) 0;
+  border-top: 1px solid var(--color-border);
 }
 
 @media (max-width: 768px) {

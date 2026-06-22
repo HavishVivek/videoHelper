@@ -39,14 +39,35 @@ const routes = [
   },
   {
     path: '/ideas',
-    name: 'Ideas',
-    component: () => import('@/views/IdeasView.vue'),
+    component: () => import('@/views/IdeasView.vue')  // ← correct
+  },
+  {
+    path: '/folders',
+    name: 'Folders',
+    component: () => import('@/views/FoldersView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/ideas/:id',
+    name: 'IdeaFolder',
+    component: () => import('@/views/IdeaFolderView.vue'),
     meta: { requiresAuth: true }
   },
   {
     path: '/calendar',
     name: 'Calendar',
     component: () => import('@/views/CalendarView.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/tasks',
+    name: 'Tasks',
+    component: () => import('@/views/Tasks.vue'),
+  },
+  {
+    path: '/settings',
+    name: 'Settings',
+    component: () => import('@/views/SettingsView.vue'),
     meta: { requiresAuth: true }
   }
 ]

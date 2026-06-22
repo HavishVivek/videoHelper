@@ -33,17 +33,18 @@ The app is designed to work offline/degraded when Firebase is not configured - i
 
 ### State Management (Pinia)
 
-Three primary stores manage application state:
+Four primary stores manage application state:
 
-1. **auth** (`src/stores/auth.js`) - Firebase authentication with Google OAuth, includes YouTube API scopes
+1. **auth** (`src/stores/auth.js`) - Firebase authentication with Google OAuth, includes YouTube and Google Calendar API scopes
 2. **channel** (`src/stores/channel.js`) - YouTube channel data, videos, and AI-generated analysis
 3. **scripts** (`src/stores/scripts.js`) - Script generation, variations, predictions, thumbnails, and metadata
+4. **ideas** (`src/stores/ideas.js`) - Video ideas, subtasks, scheduling, and Google Calendar sync
 
 **Storage Pattern**: All stores use a Firebase/localStorage hybrid approach. The `fsSet`, `fsGet`, `fsGetAll`, `fsDelete` functions in `scripts.js` attempt Firestore first, then gracefully fall back to localStorage if Firebase is unavailable. This pattern enables offline-first capability.
 
 ### Service Layer
 
-- **firebase.js** - Initializes Firebase app, Auth, and Firestore; exports `firebaseConfigured` flag
+- **firebase.js** - Initializes Firebase app, Auth, and Firestore; exports `firebaseConfigured` flag. OAuth scopes include YouTube and Google Calendar.
 - **youtube.js** - YouTube Data API client for fetching channels, videos, and metadata
 - **groq.js** - Groq SDK integration with system prompts for:
   - Channel analysis
@@ -53,6 +54,11 @@ Three primary stores manage application state:
   - Performance prediction
   - Thumbnail concepts
   - Metadata optimization
+- **googleCalendar.js** - Google Calendar API integration for two-way sync of production schedules:
+  - Creates/updates/deletes calendar events
+  - Syncs scripting, filming, and post dates
+  - Manages a dedicated "YouTube Production Schedule" calendar
+  - Supports pulling updates from Google Calendar back to the app
 
 ### Composables
 
@@ -61,6 +67,7 @@ Composables wrap store logic and provide reusable patterns:
 - **useChannel.js** - Channel loading, video fetching, and analysis
 - **useScripts.js** - Script operations including `setupAutoSave` for debounced saving
 - **useGroq.js** - Direct access to Groq service methods
+- **useCalendarSync.js** - Google Calendar sync operations and state
 
 ### Routing
 
@@ -79,7 +86,10 @@ All routes except `/` (Dashboard) require authentication via `meta: { requiresAu
 
 On app initialization (`main.js`), the auth store's `initAuth()` method is called before mounting. This waits for Firebase's `onAuthStateChanged` listener to resolve, ensuring the user state is known before rendering. Unauthenticated users can still view the Dashboard but cannot access protected features.
 
-Google OAuth requests YouTube readonly scopes (`youtube.readonly`, `yt-analytics.readonly`) to enable channel analysis features.
+Google OAuth requests the following scopes:
+- `youtube.readonly` - Read YouTube channel data
+- `yt-analytics.readonly` - Read YouTube analytics data
+- `calendar` - Read/write Google Calendar events for production schedule sync
 
 ### AI Script Generation Workflow
 
@@ -138,6 +148,36 @@ Auto-save is implemented in `useScripts.setupAutoSave()` with a 2-second debounc
 - **Streaming**: Full script generation supports streaming via `streamFullScript()` generator function
 - **System Prompts**: Defined in `SYSTEM_PROMPTS` object in `groq.js` - modify these to change AI behavior
 - **Error Handling**: Always parse JSON responses with try/catch; fallback to sensible defaults
+
+## Google Calendar Integration
+
+The app supports two-way sync between the content calendar and Google Calendar.
+
+### Setup Requirements
+- Google Calendar API enabled in Cloud Console (see `GOOGLE_CALENDAR_SETUP.md`)
+- OAuth scope `https://www.googleapis.com/auth/calendar` (already added to `firebase.js`)
+- User signed in with Google
+
+### Sync Features
+
+**Push to Google Calendar** - Creates/updates events in a dedicated "YouTube Production Schedule" calendar:
+- 📝 Scripting events (Blue) - from `scheduledScriptDate` to `scheduledScriptEndDate`
+- 🎥 Filming events (Green) - from `scheduledFilmDate` to `scheduledFilmEndDate`
+- 📺 Post events (Yellow) - on `scheduledPostDate`
+
+**Pull from Google Calendar** - Detects changes made in Google Calendar and updates the app
+
+**Auto-sync** - When enabled, automatically pushes date changes to Google Calendar
+
+### Data Storage
+- `googleCalendarId` - ID of the synced calendar (stored in localStorage per user)
+- `googleCalendarEventIds` - Object mapping event types to Google Calendar event IDs (stored in each idea)
+- `autoSyncEnabled` - Boolean flag for auto-sync preference (stored in localStorage per user)
+
+### API Methods
+All methods in `googleCalendar.js` use the Google Calendar REST API v3 with OAuth access tokens from Firebase Auth.
+
+Events are tagged with `extendedProperties.private.source = 'youtube-helper-app'` to identify app-created events.
 
 ## Testing Strategy
 

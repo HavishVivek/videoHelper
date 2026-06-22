@@ -113,6 +113,10 @@ export const useScriptsStore = defineStore('scripts', () => {
     return scripts.value.find(s => s.ideaId === ideaId) || null
   }
 
+  function getScriptsByIdeaId(ideaId) {
+    return scripts.value.filter(s => s.ideaId === ideaId)
+  }
+
 // ...
 // ...
 
@@ -564,6 +568,7 @@ export const useScriptsStore = defineStore('scripts', () => {
     error,
     sortedScripts,
     getScriptByIdeaId,
+    getScriptsByIdeaId,
     loadScripts,
     loadScript,
     generateIntros,

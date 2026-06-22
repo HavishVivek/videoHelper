@@ -26,7 +26,9 @@ export const useAuthStore = defineStore('auth', () => {
 
       const result = await signInWithPopup(auth, googleProvider)
       const credential = result._tokenResponse
-      accessToken.value = credential?.oauthAccessToken || null
+      const token = credential?.oauthAccessToken || null
+
+      accessToken.value = token
 
       user.value = {
         uid: result.user.uid,
@@ -40,7 +42,9 @@ export const useAuthStore = defineStore('auth', () => {
         email: result.user.email,
         displayName: result.user.displayName,
         photoURL: result.user.photoURL,
-        lastLogin: new Date().toISOString()
+        lastLogin: new Date().toISOString(),
+        accessToken: token,
+        tokenExpiry: credential?.expiresIn ? Date.now() + (credential.expiresIn * 1000) : null
       }, { merge: true })
     } catch (e) {
       error.value = e.message
@@ -83,7 +87,17 @@ export const useAuthStore = defineStore('auth', () => {
               const { doc, getDoc } = await import('firebase/firestore')
               const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid))
               if (userDoc.exists()) {
-                accessToken.value = userDoc.data().accessToken || null
+                const userData = userDoc.data()
+                const tokenExpiry = userData.tokenExpiry
+
+                // Check if token is expired (within 5 min buffer)
+                if (tokenExpiry && Date.now() < tokenExpiry - 300000) {
+                  accessToken.value = userData.accessToken || null
+                } else {
+                  // Token expired or about to expire - need to re-authenticate
+                  accessToken.value = null
+                  console.warn('Access token expired. Please sign out and sign back in.')
+                }
               }
             } catch (e) {
               console.error('Error loading user data:', e)

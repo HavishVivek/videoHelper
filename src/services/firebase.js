@@ -25,6 +25,7 @@ if (firebaseConfigured) {
   googleProvider = new GoogleAuthProvider()
   googleProvider.addScope('https://www.googleapis.com/auth/youtube.readonly')
   googleProvider.addScope('https://www.googleapis.com/auth/yt-analytics.readonly')
+  googleProvider.addScope('https://www.googleapis.com/auth/calendar')
 }
 
 export { auth, db, googleProvider }
