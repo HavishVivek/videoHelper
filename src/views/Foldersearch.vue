@@ -29,8 +29,7 @@ const expanded  = ref(false)
 const overlay   = ref(false)
 
 // ── API ────────────────────────────────────────────────────────────────────
-// ⚠️ Rotate this key immediately and move it server-side.
-const API_KEY = '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'
+const API_KEY = import.meta.env.VITE_GROQ_API_KEY
 const API_URL = 'https://api.groq.com/openai/v1/chat/completions'
 
 // ── Helpers ────────────────────────────────────────────────────────────────
