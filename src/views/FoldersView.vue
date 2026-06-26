@@ -7,7 +7,7 @@ import PageContainer from '@/components/layout/PageContainer.vue'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import BaseModal from '@/components/ui/BaseModal.vue'
 import FolderSearch from './Foldersearch.vue'
-import FolderProgressBadge from './FolderProgressBadge.vue'
+import FolderProgressBadge from './Folderprogressbadge.vue'
 
 import {
   PhFolder, PhFolderOpen, PhFileTxt, PhImage, PhVideo,
