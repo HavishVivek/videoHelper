@@ -7,6 +7,11 @@ import {
   PhSparkle, PhWarning, PhCode, PhGraph, PhPencilSimpleLine,
 } from '@phosphor-icons/vue'
 
+// ── Backend client ───────────────────────────────────────────────────────────
+// apiPost attaches the Firebase ID token and POSTs JSON to the Node backend.
+// Adjust this path if your wrapper lives elsewhere.
+import { apiPost } from '@/api/client'
+
 // ── Props ──────────────────────────────────────────────────────────────────
 const props = defineProps({
   folders: {
@@ -18,21 +23,17 @@ const props = defineProps({
 const emit = defineEmits(['open-folder', 'open-item'])
 
 // ── State ──────────────────────────────────────────────────────────────────
-const query     = ref('')
-const loading   = ref(false)
-const results   = ref(null)
-const error     = ref('')
-const inputEl   = ref(null)
+const query = ref('')
+const loading = ref(false)
+const results = ref(null)
+const error = ref('')
+const inputEl = ref(null)
 const overlayEl = ref(null)
 
-const expanded  = ref(false)
-const overlay   = ref(false)
+const expanded = ref(false)
+const overlay = ref(false)
 
-// ── API ────────────────────────────────────────────────────────────────────
-const API_KEY = import.meta.env.VITE_GROQ_API_KEY
-const API_URL = 'https://api.groq.com/openai/v1/chat/completions'
-
-// ── Helpers ────────────────────────────────────────────────────────────────
+// ── Helpers (corpus building stays client-side — it reads props.folders) ────
 function normalizeText(value) {
   if (value == null) return ''
   if (Array.isArray(value)) return value.map(normalizeText).filter(Boolean).join(' ')
@@ -156,56 +157,7 @@ function buildCorpus(folders) {
   })
 }
 
-function safeJsonParse(raw) {
-  const clean = String(raw || '').replace(/```json|```/g, '').trim()
-  try {
-    return JSON.parse(clean)
-  } catch {
-    const match = clean.match(/\{[\s\S]*\}/)
-    if (!match) throw new Error('Could not parse AI response. Please try again.')
-    return JSON.parse(match[0])
-  }
-}
-
-// ── System prompt with explicit JSON contract ──────────────────────────────
-const SYSTEM_PROMPT = `You are a semantic search engine for a project management app called Eden Board.
-
-Your job is to find folders (projects) that match a user's natural-language query.
-Search across ALL content inside each folder: topic, type, tags, status, board items, scripts, thumbnails, filmed sections, canvas cards, subtasks, BOM parts, build logs, links, whiteboard notes, schematics, and code subfolders.
-
-Do NOT limit matches to the folder name/topic only.
-A folder matches if ANY of its nested content is relevant.
-If a match is found inside a board item, link, or subfolder, return the parent folderId.
-
-IMPORTANT — links:
-Each link entry contains the URL itself PLUS extracted URL path keywords.
-Treat URL path keywords as meaningful searchable content.
-
-Return ONLY a valid JSON object with this exact shape and no other text:
-{
-  "summary": "<one sentence describing what you found>",
-  "matches": [
-    {
-      "folderId": "<id string>",
-      "relevance": "high" | "medium" | "low",
-      "reason": "<one sentence explaining why this folder matches>",
-      "matchedItems": [
-        {
-          "type": "script" | "thumbnail" | "section" | "note" | "link" | "part" | "log" | "subtask" | "schematic" | "code" | "canvas",
-          "name": "<item title or short label>",
-          "snippet": "<10-20 word excerpt from the content that matched>"
-        }
-      ]
-    }
-  ]
-}
-
-Rules:
-- Include ALL folders that are relevant, even loosely.
-- matchedItems should list the specific pieces of content inside the folder that matched.
-- Sort matches from highest to lowest relevance.
-- If nothing matches, return { "summary": "No matching folders found.", "matches": [] }.`
-
+// ── Search (AI call now lives on the backend) ───────────────────────────────
 async function search() {
   const q = query.value.trim()
   if (!q) return
@@ -221,51 +173,13 @@ async function search() {
   const corpus = buildCorpus(props.folders)
 
   try {
-    const res = await fetch(API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
-        temperature: 0.1,
-        max_tokens: 2000,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content: `${SYSTEM_PROMPT}
-
-Additional rules:
-- Match folders by content inside board items, links, subfolders, notes, and any nested content.
-- If any nested item matches, return the parent folderId.
-- Do not omit a folder just because its topic/title does not match.
-- Prefer the exact folder that contains the strongest nested match.`
-          },
-          {
-            role: 'user',
-            content: `Search query: "${q}"
-
-Folders:
-${JSON.stringify(corpus, null, 2)}`,
-          },
-        ],
-      }),
-    })
-
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}))
-      throw new Error(errBody?.error?.message || `HTTP ${res.status}`)
-    }
-
-    const data = await res.json()
-    const raw = data.choices?.[0]?.message?.content || ''
-    const parsed = safeJsonParse(raw)
+    // Backend owns the Groq key, system prompt, and JSON parsing.
+    // It returns { summary, matches: [{ folderId, relevance, reason, matchedItems }] }
+    const data = await apiPost('/api/ai-search', { query: q, corpus })
 
     results.value = {
-      summary: parsed.summary || '',
-      matches: (parsed.matches || [])
+      summary: data.summary || '',
+      matches: (data.matches || [])
         .map(m => ({
           ...m,
           folder: props.folders.find(f => (f.idea?.id ?? f.id) === m.folderId),
@@ -321,18 +235,18 @@ watch(overlay, (open) => {
 
 // ── Icon map ───────────────────────────────────────────────────────────────
 const TYPE_ICONS = {
-  script:    PhFileTxt,
+  script: PhFileTxt,
   thumbnail: PhImage,
-  section:   PhVideo,
-  note:      PhNote,
-  link:      PhLink,
-  part:      PhListChecks,
-  log:       PhClipboardText,
-  pinout:    PhPlugs,
-  subtask:   PhArrowRight,
+  section: PhVideo,
+  note: PhNote,
+  link: PhLink,
+  part: PhListChecks,
+  log: PhClipboardText,
+  pinout: PhPlugs,
+  subtask: PhArrowRight,
   schematic: PhGraph,
-  code:      PhCode,
-  canvas:    PhPencilSimpleLine,
+  code: PhCode,
+  canvas: PhPencilSimpleLine,
 }
 
 function iconFor(type) {
@@ -340,7 +254,7 @@ function iconFor(type) {
 }
 
 const relevanceOrder = { high: 0, medium: 1, low: 2 }
-const sortedMatches  = computed(() =>
+const sortedMatches = computed(() =>
   (results.value?.matches || [])
     .slice()
     .sort((a, b) => (relevanceOrder[a.relevance] ?? 9) - (relevanceOrder[b.relevance] ?? 9))
@@ -351,42 +265,22 @@ const sortedMatches  = computed(() =>
   <div class="fs">
 
     <!-- ── Inline trigger bar (expanding glow) ─────────────────────────── -->
-    <div
-      class="fs__bar"
-      :class="{ 'fs__bar--expanded': expanded || query, 'fs__bar--active': loading }"
-      @click="expandBar"
-    >
+    <div class="fs__bar" :class="{ 'fs__bar--expanded': expanded || query, 'fs__bar--active': loading }"
+      @click="expandBar">
       <PhMagnifyingGlass class="fs__bar-icon" :size="16" weight="bold" />
 
-      <input
-        ref="inputEl"
-        v-model="query"
-        class="fs__input"
-        placeholder="Search across all folders with AI…"
-        @keydown.enter="search"
-        @keydown.escape="clear"
-        @blur="collapseBar"
-        autocomplete="off"
-        spellcheck="false"
-      />
+      <input ref="inputEl" v-model="query" class="fs__input" placeholder="Search across all folders with AI…"
+        @keydown.enter="search" @keydown.escape="clear" @blur="collapseBar" autocomplete="off" spellcheck="false" />
 
       <button v-if="loading" class="fs__action-btn" disabled aria-label="Loading">
         <PhSpinner class="fs__spin" :size="15" weight="bold" />
       </button>
-      <button
-        v-else-if="query"
-        class="fs__action-btn fs__action-btn--clear"
-        @click.stop="clear"
-        aria-label="Clear search"
-      >
+      <button v-else-if="query" class="fs__action-btn fs__action-btn--clear" @click.stop="clear"
+        aria-label="Clear search">
         <PhX :size="14" weight="bold" />
       </button>
 
-      <button
-        class="fs__search-btn"
-        :disabled="!query.trim() || loading"
-        @click.stop="search"
-      >
+      <button class="fs__search-btn" :disabled="!query.trim() || loading" @click.stop="search">
         <PhSparkle :size="13" weight="fill" />
         Search
       </button>
@@ -406,15 +300,9 @@ const sortedMatches  = computed(() =>
             <!-- palette search header -->
             <div class="fs-palette__bar">
               <PhMagnifyingGlass :size="18" weight="bold" class="fs-palette__icon" />
-              <input
-                ref="overlayEl"
-                v-model="query"
-                class="fs-palette__input"
-                placeholder="Search across all folders with AI…"
-                @keydown.enter="search"
-                autocomplete="off"
-                spellcheck="false"
-              />
+              <input ref="overlayEl" v-model="query" class="fs-palette__input"
+                placeholder="Search across all folders with AI…" @keydown.enter="search" autocomplete="off"
+                spellcheck="false" />
               <PhSpinner v-if="loading" class="fs__spin fs-palette__spin" :size="16" weight="bold" />
               <kbd class="fs-palette__kbd" @click="closeOverlay">esc</kbd>
             </div>
@@ -446,13 +334,8 @@ const sortedMatches  = computed(() =>
                 </div>
 
                 <div v-else class="fs__matches">
-                  <div
-                    v-for="(match, mi) in sortedMatches"
-                    :key="match.folderId"
-                    class="fs__match"
-                    :class="`fs__match--${match.relevance}`"
-                    :style="{ '--i': mi }"
-                  >
+                  <div v-for="(match, mi) in sortedMatches" :key="match.folderId" class="fs__match"
+                    :class="`fs__match--${match.relevance}`" :style="{ '--i': mi }">
                     <div class="fs__match-header" @click="openFolder(match.folderId)">
                       <div class="fs__match-folder-info">
                         <PhFolder :size="16" weight="fill" class="fs__match-folder-icon" />
@@ -465,12 +348,8 @@ const sortedMatches  = computed(() =>
                     </div>
 
                     <div v-if="match.matchedItems?.length" class="fs__match-items">
-                      <div
-                        v-for="(item, i) in match.matchedItems"
-                        :key="i"
-                        class="fs__match-item"
-                        @click="openFolder(match.folderId)"
-                      >
+                      <div v-for="(item, i) in match.matchedItems" :key="i" class="fs__match-item"
+                        @click="openFolder(match.folderId)">
                         <div class="fs__item-icon-wrap" :data-type="item.type">
                           <component :is="iconFor(item.type)" :size="11" weight="regular" />
                         </div>
@@ -544,7 +423,9 @@ const sortedMatches  = computed(() =>
   min-width: 0;
 }
 
-.fs__input::placeholder { color: var(--color-text-muted); }
+.fs__input::placeholder {
+  color: var(--color-text-muted);
+}
 
 .fs__action-btn {
   background: none;
@@ -559,10 +440,19 @@ const sortedMatches  = computed(() =>
   transition: color 0.15s;
 }
 
-.fs__action-btn--clear:hover { color: var(--color-text-primary); }
+.fs__action-btn--clear:hover {
+  color: var(--color-text-primary);
+}
 
-.fs__spin { animation: spin 0.7s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.fs__spin {
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 
 .fs__search-btn {
   display: flex;
@@ -582,8 +472,14 @@ const sortedMatches  = computed(() =>
   flex-shrink: 0;
 }
 
-.fs__search-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.fs__search-btn:not(:disabled):hover { background: #534AB7; }
+.fs__search-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.fs__search-btn:not(:disabled):hover {
+  background: #534AB7;
+}
 
 /* ── Overlay (Option B: clear / transparent) ───────────────────────────── */
 .fs-overlay {
@@ -629,7 +525,10 @@ const sortedMatches  = computed(() =>
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.fs-palette__icon { color: #AFA9EC; flex-shrink: 0; }
+.fs-palette__icon {
+  color: #AFA9EC;
+  flex-shrink: 0;
+}
 
 .fs-palette__input {
   flex: 1;
@@ -641,9 +540,15 @@ const sortedMatches  = computed(() =>
   color: #fff;
   min-width: 0;
 }
-.fs-palette__input::placeholder { color: rgba(255, 255, 255, 0.45); }
 
-.fs-palette__spin { color: #AFA9EC; flex-shrink: 0; }
+.fs-palette__input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.fs-palette__spin {
+  color: #AFA9EC;
+  flex-shrink: 0;
+}
 
 .fs-palette__kbd {
   font-size: 11px;
@@ -655,7 +560,10 @@ const sortedMatches  = computed(() =>
   flex-shrink: 0;
   transition: background 0.15s;
 }
-.fs-palette__kbd:hover { background: rgba(255, 255, 255, 0.08); }
+
+.fs-palette__kbd:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
 
 .fs-palette__body {
   padding: 12px;
@@ -674,7 +582,10 @@ const sortedMatches  = computed(() =>
   font-size: 13px;
   color: rgba(255, 255, 255, 0.7);
 }
-.fs-palette__loading .fs__spin { color: #AFA9EC; }
+
+.fs-palette__loading .fs__spin {
+  color: #AFA9EC;
+}
 
 /* ── Error ─────────────────────────────────────────────────────────────── */
 .fs__error {
@@ -699,7 +610,11 @@ const sortedMatches  = computed(() =>
   margin: 0;
   padding: 0 2px;
 }
-.fs__summary-icon { color: #AFA9EC; flex-shrink: 0; }
+
+.fs__summary-icon {
+  color: #AFA9EC;
+  flex-shrink: 0;
+}
 
 .fs__empty {
   font-size: 13px;
@@ -732,7 +647,10 @@ const sortedMatches  = computed(() =>
 }
 
 @keyframes matchIn {
-  to { opacity: 1; transform: translateY(0); }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .fs__match:hover {
@@ -741,9 +659,17 @@ const sortedMatches  = computed(() =>
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
-.fs__match--high   { border-left: 3px solid #7F77DD; }
-.fs__match--medium { border-left: 3px solid #AFA9EC; }
-.fs__match--low    { border-left: 3px solid rgba(212, 210, 245, 0.5); }
+.fs__match--high {
+  border-left: 3px solid #7F77DD;
+}
+
+.fs__match--medium {
+  border-left: 3px solid #AFA9EC;
+}
+
+.fs__match--low {
+  border-left: 3px solid rgba(212, 210, 245, 0.5);
+}
 
 .fs__match-header {
   display: flex;
@@ -753,7 +679,10 @@ const sortedMatches  = computed(() =>
   cursor: pointer;
   transition: background 0.12s;
 }
-.fs__match-header:hover { background: rgba(255, 255, 255, 0.05); }
+
+.fs__match-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
 
 .fs__match-folder-info {
   display: flex;
@@ -761,7 +690,10 @@ const sortedMatches  = computed(() =>
   gap: 7px;
 }
 
-.fs__match-folder-icon { color: #AFA9EC; flex-shrink: 0; }
+.fs__match-folder-icon {
+  color: #AFA9EC;
+  flex-shrink: 0;
+}
 
 .fs__match-folder-name {
   font-size: 13px;
@@ -784,9 +716,23 @@ const sortedMatches  = computed(() =>
   flex-shrink: 0;
 }
 
-.fs__relevance-chip--high   { background: rgba(127,119,221,.25); color: #d6d2ff; border: 0.5px solid rgba(175,169,236,.5); }
-.fs__relevance-chip--medium { background: rgba(127,119,221,.15); color: #c2bdf2; border: 0.5px solid rgba(212,210,245,.4); }
-.fs__relevance-chip--low    { background: rgba(255,255,255,.06); color: #b3b0d6; border: 0.5px solid rgba(224,223,248,.25); }
+.fs__relevance-chip--high {
+  background: rgba(127, 119, 221, .25);
+  color: #d6d2ff;
+  border: 0.5px solid rgba(175, 169, 236, .5);
+}
+
+.fs__relevance-chip--medium {
+  background: rgba(127, 119, 221, .15);
+  color: #c2bdf2;
+  border: 0.5px solid rgba(212, 210, 245, .4);
+}
+
+.fs__relevance-chip--low {
+  background: rgba(255, 255, 255, .06);
+  color: #b3b0d6;
+  border: 0.5px solid rgba(224, 223, 248, .25);
+}
 
 .fs__match-reason {
   font-size: 11px;
@@ -809,8 +755,14 @@ const sortedMatches  = computed(() =>
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   transition: background 0.1s;
 }
-.fs__match-item:last-child { border-bottom: none; }
-.fs__match-item:hover { background: rgba(255, 255, 255, 0.05); }
+
+.fs__match-item:last-child {
+  border-bottom: none;
+}
+
+.fs__match-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
 
 .fs__item-icon-wrap {
   width: 24px;
@@ -824,17 +776,60 @@ const sortedMatches  = computed(() =>
   color: #c2bdf2;
 }
 
-.fs__item-icon-wrap[data-type="script"]    { background: rgba(127,119,221,.22); color: #cfc9ff; }
-.fs__item-icon-wrap[data-type="thumbnail"] { background: rgba(52,152,219,.22);  color: #8fc7ef; }
-.fs__item-icon-wrap[data-type="section"]   { background: rgba(29,158,117,.22);  color: #7fdcba; }
-.fs__item-icon-wrap[data-type="link"]      { background: rgba(186,117,23,.22);  color: #e6b86b; }
-.fs__item-icon-wrap[data-type="note"]      { background: rgba(153,53,86,.22);   color: #e493ad; }
-.fs__item-icon-wrap[data-type="part"]      { background: rgba(15,157,119,.22);  color: #6fd6b3; }
-.fs__item-icon-wrap[data-type="log"]       { background: rgba(186,117,23,.22);  color: #e6b86b; }
-.fs__item-icon-wrap[data-type="subtask"]   { background: rgba(127,119,221,.18); color: #c2bdf2; }
-.fs__item-icon-wrap[data-type="schematic"] { background: rgba(52,152,219,.22);  color: #8fc7ef; }
-.fs__item-icon-wrap[data-type="code"]      { background: rgba(39,174,96,.22);   color: #7fd6a0; }
-.fs__item-icon-wrap[data-type="canvas"]    { background: rgba(155,89,182,.22);  color: #cf9fe0; }
+.fs__item-icon-wrap[data-type="script"] {
+  background: rgba(127, 119, 221, .22);
+  color: #cfc9ff;
+}
+
+.fs__item-icon-wrap[data-type="thumbnail"] {
+  background: rgba(52, 152, 219, .22);
+  color: #8fc7ef;
+}
+
+.fs__item-icon-wrap[data-type="section"] {
+  background: rgba(29, 158, 117, .22);
+  color: #7fdcba;
+}
+
+.fs__item-icon-wrap[data-type="link"] {
+  background: rgba(186, 117, 23, .22);
+  color: #e6b86b;
+}
+
+.fs__item-icon-wrap[data-type="note"] {
+  background: rgba(153, 53, 86, .22);
+  color: #e493ad;
+}
+
+.fs__item-icon-wrap[data-type="part"] {
+  background: rgba(15, 157, 119, .22);
+  color: #6fd6b3;
+}
+
+.fs__item-icon-wrap[data-type="log"] {
+  background: rgba(186, 117, 23, .22);
+  color: #e6b86b;
+}
+
+.fs__item-icon-wrap[data-type="subtask"] {
+  background: rgba(127, 119, 221, .18);
+  color: #c2bdf2;
+}
+
+.fs__item-icon-wrap[data-type="schematic"] {
+  background: rgba(52, 152, 219, .22);
+  color: #8fc7ef;
+}
+
+.fs__item-icon-wrap[data-type="code"] {
+  background: rgba(39, 174, 96, .22);
+  color: #7fd6a0;
+}
+
+.fs__item-icon-wrap[data-type="canvas"] {
+  background: rgba(155, 89, 182, .22);
+  color: #cf9fe0;
+}
 
 .fs__item-content {
   display: flex;
@@ -887,17 +882,27 @@ const sortedMatches  = computed(() =>
   cursor: pointer;
   transition: background 0.12s, color 0.12s;
 }
-.fs__open-btn:hover { background: rgba(255, 255, 255, 0.06); color: #d6d2ff; }
+
+.fs__open-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #d6d2ff;
+}
 
 /* ── Overlay enter / leave ─────────────────────────────────────────────── */
 .fs-overlay-enter-active,
-.fs-overlay-leave-active { transition: opacity 0.28s ease; }
+.fs-overlay-leave-active {
+  transition: opacity 0.28s ease;
+}
+
 .fs-overlay-enter-from,
-.fs-overlay-leave-to { opacity: 0; }
+.fs-overlay-leave-to {
+  opacity: 0;
+}
 
 .fs-overlay-enter-active .fs-palette {
   transition: transform 0.38s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.32s;
 }
+
 .fs-overlay-enter-from .fs-palette {
   transform: scale(0.95) translateY(-8px);
   opacity: 0;
@@ -905,8 +910,18 @@ const sortedMatches  = computed(() =>
 
 /* ── Reduced motion ────────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
-  .fs__match { animation: none; opacity: 1; transform: none; }
-  .fs__spin  { animation: none; }
-  .fs-overlay-enter-active .fs-palette { transition: none; }
+  .fs__match {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .fs__spin {
+    animation: none;
+  }
+
+  .fs-overlay-enter-active .fs-palette {
+    transition: none;
+  }
 }
 </style>

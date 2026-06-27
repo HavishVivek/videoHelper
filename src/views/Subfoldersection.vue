@@ -9,7 +9,7 @@ import { useIdeasStore } from '@/stores/ideas'
 import BaseButton from '@/components/ui/BaseButton.vue'
 import { saveImage, getImageBlob, deleteImage, imageKey } from '@/services/imageStorage'
 import VueFeather from 'vue-feather'
-import { openDrivePicker } from '@/composables/useDrivePicker'
+import { openDrivePicker } from '../api/drive.js'
 
 const props = defineProps({
     ideaId: { type: String, required: true },

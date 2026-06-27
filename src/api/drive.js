@@ -1,5 +1,11 @@
+// src/api/drive.js  (FRONTEND)
 // Loads Google's gapi + GIS scripts and opens the Drive Picker.
-// Requires CLIENT_ID, API_KEY, APP_ID from Google Cloud Console.
+// The Picker is inherently client-side: it needs a browser window and the
+// user's own OAuth consent. CLIENT_ID and APP_ID are public by design.
+// API_KEY (developer key) is required by setDeveloperKey() — lock it down with
+// HTTP-referrer + API restrictions in Google Cloud Console.
+
+import { apiPost } from '@/api/client'
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 const API_KEY   = import.meta.env.VITE_GOOGLE_API_KEY
@@ -47,7 +53,6 @@ function getToken() {
       accessToken = resp.access_token
       resolve(accessToken)
     }
-    // prompt only if we don't already have a token
     tokenClient.requestAccessToken({ prompt: accessToken ? '' : 'consent' })
   })
 }
@@ -57,10 +62,8 @@ function getToken() {
  * [{ id, name, url, mimeType, iconUrl }]
  */
 export async function openDrivePicker() {
-    console.log('KEY AT CALL TIME:', API_KEY)
-    console.log('APP ID:', APP_ID, 'CLIENT ID:', CLIENT_ID)
-    await ensureLoaded()
-    await getToken()
+  await ensureLoaded()
+  await getToken()
 
   return new Promise((resolve) => {
     const view = new window.google.picker.DocsView(window.google.picker.ViewId.DOCS)
@@ -91,4 +94,27 @@ export async function openDrivePicker() {
 
     picker.setVisible(true)
   })
+}
+
+/**
+ * Full flow for the "store an item from Drive" feature:
+ * 1. user picks files in the browser (Picker)
+ * 2. we hand the file refs + the user's Drive access token to the backend
+ * 3. backend fetches metadata/content server-side and persists to Firestore
+ *
+ * Returns whatever the backend sends back (e.g. the stored item records).
+ */
+export async function pickAndStoreFromDrive(folderId) {
+  const files = await openDrivePicker()
+  if (files.length === 0) return []   // user cancelled
+
+  // accessToken was set by getToken() inside openDrivePicker().
+  // The backend uses it to call the Drive API on the user's behalf.
+  const result = await apiPost('/api/drive/store', {
+    folderId,
+    files,
+    driveAccessToken: accessToken,
+  })
+
+  return result.items || []
 }

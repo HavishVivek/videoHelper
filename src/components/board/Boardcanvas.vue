@@ -8,13 +8,14 @@ const props = defineProps({
     title: { type: String, default: '' },
     // Folder/section context for the side nav
     folderName: { type: String, default: 'Ideas' },
+    // Subfolders inside the main folder. Each: { id, label, route, icon? }
     folderSections: {
         type: Array,
         default: () => [
-            { id: 'board', label: 'Board', icon: 'board' },
-            { id: 'notes', label: 'Notes', icon: 'note' },
-            { id: 'links', label: 'Links', icon: 'link' },
-            { id: 'images', label: 'Images', icon: 'image' },
+            { id: 'board', label: 'Board', route: '/', icon: 'board' },
+            { id: 'notes', label: 'Notes', route: '/', icon: 'note' },
+            { id: 'links', label: 'Links', route: '/', icon: 'link' },
+            { id: 'images', label: 'Images', route: '/', icon: 'image' },
         ]
     },
     activeSection: { type: String, default: 'board' },
@@ -40,15 +41,16 @@ function goHome() {
     }
 }
 
-function goToSection(sectionId) {
+// Navigate to any subfolder by its route
+function goToSubfolder(sub) {
     closeSideNav()
-    if (sectionId === 'board') {
-        // Already on the board — just close the nav
-        return
+    if (!sub?.route) return
+    try {
+        router.push(sub.route)
+    } catch {
+        // Fall back to emitting so a parent can handle navigation
+        emit('navigate', sub)
     }
-    // Switch the parent's active tab, then dismiss the board overlay
-    emit('section-change', sectionId)
-    nextTick(() => emit('close'))
 }
 
 // ── State ──────────────────────────────────────────────────────────────────────
@@ -63,6 +65,7 @@ const linkError = ref('')
 const linkInputEl = ref(null)
 const linkModalOpen = ref(false)
 const linkLoading = ref(false)
+const linkLoadingUrl = ref('')
 
 const noteText = ref('')
 const noteColor = ref('white')
@@ -83,7 +86,6 @@ const editingText = ref('')
 const docEditTitle = ref('')
 const docEditBody = ref('')
 
-// ── Context menu ──────────────────────────────────────────────────────────────
 // ── Context menu ──────────────────────────────────────────────────────────────
 const contextMenu = ref({ visible: false, x: 0, y: 0, canvasX: 0, canvasY: 0 })
 const contextMenuEl = ref(null)
@@ -406,6 +408,7 @@ async function addLink() {
     if (!raw) return
     linkFetching.value = true
     linkLoading.value = true
+    linkLoadingUrl.value = raw
     linkError.value = ''
     closeLinkModal()
     try {
@@ -473,6 +476,7 @@ async function addLink() {
     } finally {
         linkFetching.value = false
         linkLoading.value = false
+        linkLoadingUrl.value = ''
     }
 }
 
@@ -818,7 +822,7 @@ function docSnippet(body) {
                         Idea Board
                     </button>
 
-                    <!-- Current folder -->
+                    <!-- ── Main folder + its subfolders ───────────────────────── -->
                     <div class="sidenav-divider" />
                     <div class="sidenav-section-label">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -828,13 +832,13 @@ function docSnippet(body) {
                         {{ props.folderName }}
                     </div>
 
-                    <!-- Sections inside folder — grouped in a visual block -->
+                    <!-- Navigate to any subfolder inside the main folder -->
                     <div class="sidenav-folder-block">
-                        <button v-for="sec in props.folderSections" :key="sec.id" class="sidenav-item"
-                            :class="{ 'sidenav-item--sub-active': props.activeSection === sec.id }"
-                            @click="goToSection(sec.id)">
+                        <button v-for="sub in props.folderSections" :key="sub.id" class="sidenav-item sidenav-subfolder"
+                            :class="{ 'sidenav-item--sub-active': props.activeSection === sub.id }"
+                            @click="goToSubfolder(sub)">
                             <!-- Board -->
-                            <template v-if="sec.icon === 'board'">
+                            <template v-if="sub.icon === 'board'">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
                                     <rect x="3" y="3" width="7" height="7" />
@@ -843,8 +847,8 @@ function docSnippet(body) {
                                     <rect x="14" y="14" width="7" height="7" />
                                 </svg>
                             </template>
-                            <!-- Scripts -->
-                            <template v-else-if="sec.icon === 'scripts' || sec.icon === 'note'">
+                            <!-- Scripts / Note -->
+                            <template v-else-if="sub.icon === 'scripts' || sub.icon === 'note'">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
                                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -855,7 +859,7 @@ function docSnippet(body) {
                                 </svg>
                             </template>
                             <!-- Thumbnails / Image -->
-                            <template v-else-if="sec.icon === 'thumbnails' || sec.icon === 'image'">
+                            <template v-else-if="sub.icon === 'thumbnails' || sub.icon === 'image'">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
                                     <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -864,7 +868,7 @@ function docSnippet(body) {
                                 </svg>
                             </template>
                             <!-- Filmed Sections / Video -->
-                            <template v-else-if="sec.icon === 'filmed' || sec.icon === 'video'">
+                            <template v-else-if="sub.icon === 'filmed' || sub.icon === 'video'">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
                                     <polygon points="23 7 16 12 23 17 23 7" />
@@ -872,23 +876,28 @@ function docSnippet(body) {
                                 </svg>
                             </template>
                             <!-- Link -->
-                            <template v-else-if="sec.icon === 'link'">
+                            <template v-else-if="sub.icon === 'link'">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
                                     <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
                                     <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                                 </svg>
                             </template>
-                            <!-- Generic fallback -->
+                            <!-- Generic folder fallback -->
                             <template v-else>
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                     stroke-width="2">
-                                    <circle cx="12" cy="12" r="4" />
+                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
                                 </svg>
                             </template>
-                            {{ sec.label }}
-                            <span v-if="props.activeSection === sec.id" class="sidenav-active-dot" />
+                            <span class="sidenav-subfolder-label">{{ sub.label }}</span>
+                            <span v-if="props.activeSection === sub.id" class="sidenav-active-dot" />
+                            <svg v-else class="sidenav-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none"
+                                stroke="currentColor" stroke-width="2.2">
+                                <polyline points="9 18 15 12 9 6" />
+                            </svg>
                         </button>
+                        <p v-if="!props.folderSections.length" class="sidenav-empty-folder">No subfolders yet</p>
                     </div>
 
                     <div class="sidenav-divider" />
@@ -1212,6 +1221,17 @@ function docSnippet(body) {
                 </div>
             </div>
         </div>
+
+        <!-- ── Link-adding loading toast ──────────────────────────────────────── -->
+        <Transition name="link-toast">
+            <div v-if="linkLoading" class="link-toast">
+                <span class="link-toast-spinner" />
+                <div class="link-toast-body">
+                    <span class="link-toast-title">Adding link to board…</span>
+                    <span v-if="linkLoadingUrl" class="link-toast-url">{{ linkLoadingUrl }}</span>
+                </div>
+            </div>
+        </Transition>
 
         <!-- ── Right-click context menu ───────────────────────────────────────── -->
         <Transition name="ctx">
@@ -1564,7 +1584,7 @@ function docSnippet(body) {
     stroke: #4f46e5;
 }
 
-/* Sub-active = current section inside the folder */
+/* Sub-active = current subfolder inside the folder */
 .sidenav-item--sub-active {
     background: #f5f3ff;
     color: #6366f1;
@@ -1595,6 +1615,37 @@ function docSnippet(body) {
     border-radius: 50%;
     background: #6366f1;
     flex-shrink: 0;
+}
+
+/* ── Subfolder navigation ───────────────────────────────────────────────────── */
+.sidenav-subfolder-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sidenav-chevron {
+    margin-left: auto;
+    color: #d1d5db;
+    flex-shrink: 0;
+    opacity: 0;
+    transform: translateX(-2px);
+    transition: opacity 0.12s, transform 0.12s, stroke 0.12s;
+}
+
+.sidenav-subfolder:hover .sidenav-chevron {
+    opacity: 1;
+    transform: translateX(0);
+    stroke: #6366f1;
+}
+
+.sidenav-empty-folder {
+    font-size: 12px;
+    color: #c4c9d4;
+    font-style: italic;
+    padding: 10px 14px;
+    margin: 0;
 }
 
 /* ── Folder block ────────────────────────────────────────────────────────────── */
@@ -2176,6 +2227,75 @@ function docSnippet(body) {
 @keyframes spin {
     to {
         transform: rotate(360deg);
+    }
+}
+
+/* ── Link-adding loading toast ──────────────────────────────────────────────── */
+.link-toast {
+    position: fixed;
+    bottom: 22px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    background: #111827;
+    color: #fff;
+    border-radius: 12px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+    max-width: 360px;
+}
+
+.link-toast-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2.5px solid rgba(255, 255, 255, 0.25);
+    border-top-color: #818cf8;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    flex-shrink: 0;
+}
+
+.link-toast-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow: hidden;
+}
+
+.link-toast-title {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.link-toast-url {
+    font-size: 11px;
+    color: #9ca3af;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 300px;
+}
+
+.link-toast-enter-active {
+    animation: toastIn 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.link-toast-leave-active {
+    animation: toastIn 0.16s ease reverse;
+}
+
+@keyframes toastIn {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(14px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
     }
 }
 
