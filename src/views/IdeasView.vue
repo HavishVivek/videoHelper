@@ -376,7 +376,7 @@ function typeIcon(type) {
           </div>
 
           <!-- ── Folder Grid ── -->
-          <div class="folder-grid">
+          <div v-if="getFolders(idea).length" class="folder-grid">
             <div v-for="folder in getFolders(idea)" :key="folder.name" class="folder-cell"
               @mouseenter="hoveredFolder = { ideaId: idea.id, folderName: folder.name }"
               @mouseleave="hoveredFolder = null"
@@ -1008,6 +1008,9 @@ function typeIcon(type) {
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .field-group {

@@ -31,19 +31,31 @@ const folders = computed(() => {
   return cfg.subfolders
 })
 
-// Board is always the first tab, folders follow
-const tabs = computed(() => idea.value ? ['board', ...folders.value] : [])
+// A blank project has no subfolders — it gets a board + a loose "files" store
+const isBlank = computed(() => folders.value.length === 0)
 
-// Default landing is the board; ?tab= overrides it
+// Board is always the first tab, folders follow.
+// Blank projects get a single "files" tab for loose storage instead of subfolders.
+const tabs = computed(() => {
+  if (!idea.value) return []
+  if (isBlank.value) return ['board', 'files']
+  return ['board', ...folders.value]
+})
+
+// Which tab we land on by default.
+// Blank projects land INSIDE the files store; everything else lands on the board.
+const defaultTab = computed(() => (isBlank.value ? 'files' : 'board'))
+
+// ?tab= overrides the default when it points to a valid tab
 const activeTab = computed(() => {
   const t = route.query.tab
   if (t && tabs.value.includes(t)) return t
-  return 'board'
+  return defaultTab.value
 })
 
 function selectTab(name) {
-  // bare /ideas/:id (no query) == board, so drop the query for board
-  if (name === 'board') {
+  // Landing on the default tab == no query needed, so drop it for a clean URL
+  if (name === defaultTab.value) {
     router.replace({ path: route.path })
   } else {
     router.replace({ path: route.path, query: { ...route.query, tab: name } })
@@ -52,6 +64,7 @@ function selectTab(name) {
 
 function tabIcon(name) {
   if (name === 'board') return 'layout'
+  if (name === 'files') return 'folder'
   const icons = {
     scripts: 'file-text', thumbnails: 'image', clips: 'film', footage: 'video',
     audio: 'mic', exports: 'package', assets: 'folder', docs: 'file-text',
@@ -89,28 +102,19 @@ function goBack() {
       </div>
 
       <div class="ifv-tabs">
-        <button
-          v-for="name in tabs"
-          :key="name"
-          class="ifv-tab"
-          :class="{ active: activeTab === name }"
-          @click="selectTab(name)"
-        >
+        <button v-for="name in tabs" :key="name" class="ifv-tab" :class="{ active: activeTab === name }"
+          @click="selectTab(name)">
           <vue-feather :type="tabIcon(name)" size="14" />
           {{ name === 'board' ? 'Board' : name }}
         </button>
       </div>
 
-      <!-- Board (whiteboard) is the default view -->
+      <!-- Board (whiteboard) -->
       <BoardCanvas v-if="activeTab === 'board'" :ideaId="idea.id" />
 
-      <!-- Otherwise the file/folder view for the active tab -->
-      <SubfolderSection
-        v-else
-        :key="activeTab"
-        :ideaId="idea.id"
-        :folderName="activeTab"
-      />
+      <!-- Otherwise the file/folder view for the active tab.
+           Blank projects use a single "files" folder for loose storage. -->
+      <SubfolderSection v-else :key="activeTab" :ideaId="idea.id" :folderName="activeTab" />
     </template>
   </PageContainer>
 </template>
@@ -120,15 +124,18 @@ function goBack() {
   padding-top: var(--space-2xl);
   text-align: center;
 }
+
 .ifv-muted {
   color: var(--color-text-muted);
 }
+
 .ifv-header {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
   margin-bottom: var(--space-lg);
 }
+
 .ifv-back {
   display: inline-flex;
   align-items: center;
@@ -143,13 +150,16 @@ function goBack() {
   align-self: flex-start;
   transition: color 0.15s;
 }
+
 .ifv-back:hover {
   color: var(--color-accent);
 }
+
 .ifv-title {
   font-size: var(--font-size-2xl);
   font-weight: 700;
 }
+
 .ifv-tabs {
   display: flex;
   gap: var(--space-xs);
@@ -158,6 +168,7 @@ function goBack() {
   border-bottom: 1px solid var(--color-border);
   padding-bottom: var(--space-sm);
 }
+
 .ifv-tab {
   display: inline-flex;
   align-items: center;
@@ -174,10 +185,12 @@ function goBack() {
   cursor: pointer;
   transition: all 0.15s;
 }
+
 .ifv-tab:hover {
   background: rgba(255, 255, 255, 0.05);
   color: var(--color-text-primary);
 }
+
 .ifv-tab.active {
   background: var(--color-bg-card);
   border-color: var(--color-accent);

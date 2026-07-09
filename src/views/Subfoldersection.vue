@@ -17,7 +17,7 @@ const props = defineProps({
 })
 
 const pickingDrive = ref(false)
-const DRIVE_FOLDERS = ['scripts', 'docs', 'schematics', 'footage', 'audio', 'thumbnails', 'code']
+const DRIVE_FOLDERS = ['scripts', 'docs', 'schematics', 'footage', 'audio', 'thumbnails', 'code', 'files']
 const showDriveBtn = computed(() => DRIVE_FOLDERS.includes(props.folderName?.toLowerCase()))
 
 function subfolderSchema(name) {

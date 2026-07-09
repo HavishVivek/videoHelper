@@ -40,4 +40,10 @@ export const PROJECT_TYPES = {
         'Deploy',
       ],
     },
+    blank: {
+      label: 'Blank Project',
+      description: 'Just a whiteboard and loose file storage — no subfolders.',
+      subfolders: [],
+      defaultTasks: [],
+    },
   }
