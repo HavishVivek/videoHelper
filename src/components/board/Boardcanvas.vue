@@ -27,6 +27,7 @@ const router = useRouter()
 
 // ── Backend base URL for the embed tier check / proxy ──────────────────────────
 const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+console.log('[embed] API_BASE =', API_BASE)
 
 // ── Side nav ──────────────────────────────────────────────────────────────────
 const sideNavOpen = ref(false)
