@@ -29,7 +29,7 @@ const router = useRouter()
 const API_BASE =
   import.meta.env.VITE_BACKEND_URL ||
   (import.meta.env.PROD
-    ? 'https://YOUR-BACKEND.vercel.app'   // ← paste your real backend URL
+    ? 'https://project-system-backend.vercel.app/'   // ← paste your real backend URL
     : 'http://localhost:8080')
 console.log('[embed] API_BASE =', API_BASE)
 
