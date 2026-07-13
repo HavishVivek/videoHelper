@@ -26,7 +26,11 @@ const ideasStore = useIdeasStore()
 const router = useRouter()
 
 // ── Backend base URL for the embed tier check / proxy ──────────────────────────
-const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+const API_BASE =
+  import.meta.env.VITE_BACKEND_URL ||
+  (import.meta.env.PROD
+    ? 'https://YOUR-BACKEND.vercel.app'   // ← paste your real backend URL
+    : 'http://localhost:8080')
 console.log('[embed] API_BASE =', API_BASE)
 
 // ── Side nav ──────────────────────────────────────────────────────────────────
