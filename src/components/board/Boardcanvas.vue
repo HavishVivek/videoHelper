@@ -25,6 +25,9 @@ const emit = defineEmits(['close', 'navigate', 'section-change'])
 const ideasStore = useIdeasStore()
 const router = useRouter()
 
+// ── Backend base URL for the embed tier check / proxy ──────────────────────────
+const API_BASE = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+
 // ── Side nav ──────────────────────────────────────────────────────────────────
 const sideNavOpen = ref(false)
 
@@ -645,11 +648,73 @@ function canvasSize() {
 const expandedCard = ref(null)
 const readerLoading = ref(false)
 
-const iframeBlocked = ref(false)
+// ── Embed tier state (iframe → proxy → screenshot) ────────────────────────────
+// 'loading' | 'iframe' | 'proxy' | 'screenshot'
+const embedTier = ref('loading')
+
+// Ask the backend which tier a URL supports. The backend inspects
+// X-Frame-Options / CSP frame-ancestors — something the browser can't
+// expose to us for cross-origin iframes.
+async function resolveEmbedTier(url) {
+    embedTier.value = 'loading'
+    try {
+        const res = await fetch(
+            `${API_BASE}/api/embed/check?url=${encodeURIComponent(url)}`,
+            { signal: AbortSignal.timeout(12000) }
+        )
+        if (!res.ok) throw new Error('check failed')
+        const data = await res.json()
+        embedTier.value = data.tier || 'screenshot'
+        armTierFallback()
+    } catch (err) {
+        console.error('[embed] tier check failed:', err)
+        // Backend unreachable → the screenshot service needs no backend,
+        // so it's the safe floor.
+        embedTier.value = 'screenshot'
+    }
+}
+
+// Manual escape hatch: cycle iframe → proxy → screenshot → iframe.
+// Covers the rare case where the proxied page renders blank (heavy SPA).
+const iframeLoaded = ref(false)
+let tierTimeout = null
+
+// If the current iframe tier doesn't fire its load event in time,
+// assume it's blocked/blank and fall to the next tier automatically.
+function armTierFallback() {
+    clearTimeout(tierTimeout)
+    iframeLoaded.value = false
+    if (embedTier.value === 'iframe' || embedTier.value === 'proxy') {
+        tierTimeout = setTimeout(() => {
+            if (!iframeLoaded.value) advanceTier()
+        }, 4000)
+    }
+}
+
+function advanceTier() {
+    if (embedTier.value === 'iframe') { embedTier.value = 'proxy'; armTierFallback() }
+    else if (embedTier.value === 'proxy') embedTier.value = 'screenshot'
+}
+
+function onIframeLoad() {
+    iframeLoaded.value = true
+    clearTimeout(tierTimeout)
+}
+
+function proxySrc(url) {
+    return `${API_BASE}/api/embed/render?url=${encodeURIComponent(url)}`
+}
+
+function screenshotSrc(url) {
+    return `https://image.thum.io/get/width/900/${url}`
+}
+
+function openLive(url) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+}
 
 async function openExpanded(card) {
     expandedCard.value = card
-    iframeBlocked.value = false
 
     if (card.type === 'doc') {
         docEditTitle.value = card.title || ''
@@ -657,9 +722,11 @@ async function openExpanded(card) {
         return
     }
 
-    // For regular links, skip reader extraction — use iframe instead
+    // For regular links, ask the backend which embed tier to use.
+    // YouTube / Twitter have their own dedicated viewers below.
     if (card.type === 'link' && !card.embed) {
-        return  // iframe handles it in the template
+        resolveEmbedTier(card.url)
+        return
     }
 }
 
@@ -678,6 +745,7 @@ async function saveDocEdits() {
 }
 
 function closeExpanded() {
+    clearTimeout(tierTimeout)
     expandedCard.value = null
 }
 
@@ -1321,7 +1389,7 @@ function docSnippet(body) {
                         </div>
                     </template>
 
-                    <!-- ════ REGULAR LINK (iframe viewer) ════ -->
+                    <!-- ════ REGULAR LINK (tiered embed viewer) ════ -->
                     <template v-else-if="expandedCard.type === 'link'">
                         <div class="detail-link-topbar">
                             <div class="detail-meta-left">
@@ -1330,8 +1398,19 @@ function docSnippet(body) {
                                 <div>
                                     <p class="detail-channel">{{ expandedCard.domain }}</p>
                                 </div>
+                                <!-- Mode badge -->
+                                <span v-if="embedTier === 'iframe'" class="embed-mode-badge embed-mode-live">Live</span>
+                                <span v-else-if="embedTier === 'proxy'"
+                                    class="embed-mode-badge embed-mode-reader">Reader</span>
+                                <span v-else-if="embedTier === 'screenshot'"
+                                    class="embed-mode-badge embed-mode-snap">Snapshot</span>
                             </div>
                             <div class="detail-actions">
+                                <!-- Switch view mode (iframe → proxy → screenshot) -->
+                                <button v-if="embedTier !== 'loading'" class="detail-open-btn"
+                                    title="Switch view mode" @click="cycleEmbedTier">
+                                    Switch view
+                                </button>
                                 <a :href="expandedCard.url" target="_blank" rel="noopener" class="detail-open-btn">
                                     Open original ↗
                                 </a>
@@ -1345,23 +1424,42 @@ function docSnippet(body) {
                             </div>
                         </div>
 
-                        <!-- iframe viewer -->
+                        <!-- Tiered embed viewer -->
                         <div class="detail-iframe-wrap">
-                            <iframe v-if="!iframeBlocked" :src="expandedCard.url" class="detail-iframe"
+                            <!-- Loading: scan bar -->
+                            <div v-if="embedTier === 'loading'" class="embed-loading">
+                                <div class="embed-scan-track">
+                                    <div class="embed-scan-bar" />
+                                </div>
+                                <p class="embed-loading-text">
+                                    Checking how {{ expandedCard.domain }} can be embedded…
+                                </p>
+                            </div>
+
+                            <!-- Tier 1: direct iframe -->
+                            <iframe v-else-if="embedTier === 'iframe'" :src="expandedCard.url"
+                                class="detail-iframe"
                                 sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-                                referrerpolicy="no-referrer" @error="iframeBlocked = true" />
-                            <!-- Blocked fallback -->
-                            <div v-else class="reader-loading">
-                                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#d1d5db"
-                                    stroke-width="1.5">
-                                    <rect x="2" y="3" width="20" height="14" rx="2" />
-                                    <line x1="8" y1="21" x2="16" y2="21" />
-                                    <line x1="12" y1="17" x2="12" y2="21" />
-                                </svg>
-                                <p>This site can't be embedded.</p>
-                                <a :href="expandedCard.url" target="_blank" rel="noopener" class="detail-open-btn">
-                                    Open in browser ↗
-                                </a>
+                                referrerpolicy="no-referrer" @load="onIframeLoad" />
+
+                            <!-- Tier 2: proxied through the backend -->
+                            <iframe v-else-if="embedTier === 'proxy'" :src="proxySrc(expandedCard.url)"
+                                class="detail-iframe"
+                                sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                                referrerpolicy="no-referrer" @load="onIframeLoad" />
+
+                            <!-- Tier 3: screenshot floor -->
+                            <div v-else class="embed-snap-wrap" @click="openLive(expandedCard.url)">
+                                <img :src="screenshotSrc(expandedCard.url)" class="embed-snap-img" alt="" />
+                                <div class="embed-snap-hint">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2">
+                                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                        <path d="M15 3h6v6" />
+                                        <path d="M10 14 21 3" />
+                                    </svg>
+                                    Snapshot — click to open the live site
+                                </div>
                             </div>
                         </div>
                     </template>
@@ -1903,6 +2001,7 @@ function docSnippet(body) {
     background: #f9fafb;
     display: flex;
     flex-direction: column;
+    position: relative;
 }
 
 .detail-iframe {
@@ -1912,6 +2011,121 @@ function docSnippet(body) {
     flex: 1;
     display: block;
     background: #fff;
+}
+
+/* ── Tiered embed: mode badge ───────────────────────────────────────────────── */
+.embed-mode-badge {
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 20px;
+    flex-shrink: 0;
+}
+
+.embed-mode-live {
+    color: #059669;
+    background: #d1fae5;
+}
+
+.embed-mode-reader {
+    color: #6366f1;
+    background: #ede9fe;
+}
+
+.embed-mode-snap {
+    color: #b45309;
+    background: #fef3c7;
+}
+
+/* ── Tiered embed: loading scan bar ─────────────────────────────────────────── */
+.embed-loading {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    padding: 40px;
+}
+
+.embed-scan-track {
+    width: 60%;
+    max-width: 320px;
+    height: 3px;
+    border-radius: 2px;
+    background: #e5e7eb;
+    overflow: hidden;
+    position: relative;
+}
+
+.embed-scan-bar {
+    position: absolute;
+    top: 0;
+    left: -35%;
+    height: 100%;
+    width: 35%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #7f77dd, #1d9e75);
+    animation: embedScan 1.3s infinite ease-in-out;
+}
+
+@keyframes embedScan {
+    from {
+        left: -35%;
+    }
+
+    to {
+        left: 100%;
+    }
+}
+
+.embed-loading-text {
+    font-size: 13px;
+    color: #9ca3af;
+    margin: 0;
+    text-align: center;
+}
+
+/* ── Tiered embed: screenshot fallback ──────────────────────────────────────── */
+.embed-snap-wrap {
+    position: relative;
+    flex: 1;
+    cursor: pointer;
+    overflow: hidden;
+    background: #131219;
+}
+
+.embed-snap-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: top;
+    display: block;
+}
+
+.embed-snap-hint {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 28px 12px 14px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.78));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+}
+
+.embed-snap-wrap:hover .embed-snap-hint {
+    opacity: 1;
 }
 
 .hamburger-btn:hover {
