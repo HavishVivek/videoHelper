@@ -10,7 +10,7 @@ import { getAuth } from 'firebase/auth'
 // import.meta.env.DEV is true on localhost:5173 and false in production builds.
 const BASE_URL = import.meta.env.DEV
   ? 'http://localhost:8080'
-  : (import.meta.env.VITE_API_BASE_URL || 'https://your-backend-url.com')
+  : (import.meta.env.VITE_API_BASE_URL || 'https://project-system-backend.vercel.app/')
 
 /**
  * Get a fresh Firebase ID token for the signed-in user.
